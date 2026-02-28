@@ -9,31 +9,37 @@ data:
   POSTGRES_PASSWORD: postgres
   # PostgreSQL 16 actual default configuration - no tuning
   postgresql.conf: |
-    # Connection Settings
+    # Connection Settings (Temporarily 20 for seeding, will reduce to 5 for baseline)
     listen_addresses = '*'
-    max_connections = 50
+    max_connections = 5
     
-    # Memory Settings (PostgreSQL defaults)
-    shared_buffers = 128MB
-    effective_cache_size = 4GB
-    maintenance_work_mem = 64MB
-    work_mem = 4MB
+    # Memory Settings (Optimized for 1GB RAM + max_connections=5)
+    # Rule: shared_buffers = 25% of total RAM = 256MB
+    shared_buffers = 256MB
+    # Rule: effective_cache_size = 50-75% of total RAM = 512MB
+    effective_cache_size = 512MB
+    # Rule: maintenance_work_mem = 5% of RAM = 50MB
+    maintenance_work_mem = 50MB
+    # Rule: work_mem = (RAM - shared_buffers) / (max_connections * 3)
+    # Temporarily for 20 connections during seeding
+    # (1024MB - 256MB) / (20 * 3) = ~12MB per operation
+    work_mem = 12MB
     
-    # WAL Settings (PostgreSQL defaults)
-    wal_buffers = -1
+    # WAL Settings (Conservative for 1GB RAM)
+    wal_buffers = 8MB
     min_wal_size = 80MB
-    max_wal_size = 1GB
+    max_wal_size = 512MB
     checkpoint_completion_target = 0.9
     
-    # Query Planner (PostgreSQL defaults)
+    # Query Planner (Defaults for baseline)
     default_statistics_target = 100
     random_page_cost = 4.0
     effective_io_concurrency = 1
     
-    # Write Performance (PostgreSQL defaults)
+    # Write Performance (Defaults)
     synchronous_commit = on
     
-    # Logging
+    # Logging (Minimal for baseline)
     log_min_duration_statement = -1
     log_checkpoints = off
     log_connections = off

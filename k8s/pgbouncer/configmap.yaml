@@ -19,15 +19,16 @@ data:
     pool_mode = transaction
     
     # Client connection limits
-    max_client_conn = 1000
+    max_client_conn = 100
     max_user_connections = 100
     
-    # Pool size settings (optimized for PostgreSQL max_connections=50)
+    # Pool size settings (Baseline: PostgreSQL max_connections=5)
     # Keep max_db_connections < PostgreSQL max_connections to leave room for admin
-    max_db_connections = 45
-    default_pool_size = 20
-    min_pool_size = 5
-    reserve_pool_size = 5
+    # With only 5 DB connections, PgBouncer will queue clients
+    max_db_connections = 4
+    default_pool_size = 2
+    min_pool_size = 1
+    reserve_pool_size = 1
     reserve_pool_timeout = 3
     
     # Connection timeouts

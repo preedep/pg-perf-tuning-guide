@@ -71,8 +71,19 @@ echo "  Active Connections (avg): $(format_number $DB_CONNECTIONS)"
 CACHE_HIT_RATIO=$(query_prometheus 'rate(pg_stat_database_blks_hit{datname="corebank"}[5m]) / (rate(pg_stat_database_blks_hit{datname="corebank"}[5m]) + rate(pg_stat_database_blks_read{datname="corebank"}[5m]) + 0.001) * 100' 'cache_hit')
 echo "  Cache Hit Ratio (avg): $(format_number $CACHE_HIT_RATIO)%"
 
+# Transaction metrics (committed transactions only)
 TPS=$(query_prometheus 'rate(pg_stat_database_xact_commit{datname="corebank"}[5m])' 'tps')
-echo "  TPS (avg): $(format_number $TPS)"
+echo "  TPS - Committed Transactions (avg): $(format_number $TPS)"
+
+# Query metrics (all queries including reads)
+ROWS_RETURNED=$(query_prometheus 'rate(pg_stat_database_tup_returned{datname="corebank"}[5m])' 'rows_returned')
+echo "  Rows Returned/sec (avg): $(format_number $ROWS_RETURNED)"
+
+ROWS_FETCHED=$(query_prometheus 'rate(pg_stat_database_tup_fetched{datname="corebank"}[5m])' 'rows_fetched')
+echo "  Rows Fetched/sec (avg): $(format_number $ROWS_FETCHED)"
+
+# Estimate QPS from tuple operations
+echo "  QPS - Estimated from Rows (avg): $(format_number $ROWS_RETURNED)"
 
 DEADLOCKS=$(query_prometheus 'pg_stat_database_deadlocks{datname="corebank"}' 'deadlocks')
 echo "  Deadlocks: $(format_number $DEADLOCKS)"
@@ -122,6 +133,9 @@ cat > "$METRICS_FILE" <<EOF
     "active_connections_avg": "$DB_CONNECTIONS",
     "cache_hit_ratio_avg": "$CACHE_HIT_RATIO",
     "tps_avg": "$TPS",
+    "rows_returned_per_sec": "$ROWS_RETURNED",
+    "rows_fetched_per_sec": "$ROWS_FETCHED",
+    "qps_estimated": "$ROWS_RETURNED",
     "deadlocks": "$DEADLOCKS"
   },
   "system_metrics": {
