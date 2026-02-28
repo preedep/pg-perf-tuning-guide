@@ -281,5 +281,95 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Max Latency: {}ms", format_number(final_stats.max_latency_ms));
     println!("========================\n");
     
+    // Generate CSV report
+    generate_csv_report(
+        test_type,
+        concurrency,
+        duration_secs,
+        &final_stats,
+        elapsed.as_secs_f64(),
+    )?;
+    
+    Ok(())
+}
+
+fn generate_csv_report(
+    test_type: &str,
+    concurrency: usize,
+    duration_secs: u64,
+    stats: &Stats,
+    elapsed_secs: f64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    
+    let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S").to_string();
+    let filename = format!("/tmp/loadtest_{}_{}.csv", test_type, timestamp);
+    
+    let mut file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&filename)?;
+    
+    // Write professional CSV report
+    writeln!(file, "PostgreSQL Performance Test Report")?;
+    writeln!(file, "Generated,{}", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"))?;
+    writeln!(file, "")?;
+    
+    // Test Configuration
+    writeln!(file, "Test Configuration")?;
+    writeln!(file, "Parameter,Value")?;
+    writeln!(file, "Test Type,{}", test_type)?;
+    writeln!(file, "Concurrency,{}", concurrency)?;
+    writeln!(file, "Duration (seconds),{}", duration_secs)?;
+    writeln!(file, "Actual Duration (seconds),{:.2}", elapsed_secs)?;
+    writeln!(file, "")?;
+    
+    // Summary Statistics
+    writeln!(file, "Summary Statistics")?;
+    writeln!(file, "Metric,Value,Unit")?;
+    writeln!(file, "Total Requests,{},requests", stats.total_requests)?;
+    writeln!(file, "Successful Requests,{},requests", stats.successful_requests)?;
+    writeln!(file, "Failed Requests,{},requests", stats.failed_requests)?;
+    writeln!(file, "Success Rate,{:.2},%", stats.success_rate())?;
+    writeln!(file, "TPS (Transactions Per Second),{:.2},tps", stats.total_requests as f64 / elapsed_secs)?;
+    writeln!(file, "QPS (Queries Per Second),{:.2},qps", stats.total_requests as f64 / elapsed_secs)?;
+    writeln!(file, "")?;
+    
+    // Latency Statistics
+    writeln!(file, "Latency Statistics")?;
+    writeln!(file, "Metric,Value (ms)")?;
+    writeln!(file, "Minimum Latency,{}", stats.min_latency_ms)?;
+    writeln!(file, "Average Latency,{:.2}", stats.avg_latency_ms())?;
+    writeln!(file, "Maximum Latency,{}", stats.max_latency_ms)?;
+    writeln!(file, "")?;
+    
+    // Performance Indicators
+    writeln!(file, "Performance Indicators")?;
+    writeln!(file, "Indicator,Status,Threshold,Actual")?;
+    
+    let success_rate = stats.success_rate();
+    let success_status = if success_rate >= 99.5 { "EXCELLENT" } else if success_rate >= 99.0 { "GOOD" } else if success_rate >= 95.0 { "ACCEPTABLE" } else { "POOR" };
+    writeln!(file, "Success Rate,{},>=99.5%,{:.2}%", success_status, success_rate)?;
+    
+    let avg_latency = stats.avg_latency_ms();
+    let latency_status = if avg_latency < 50.0 { "EXCELLENT" } else if avg_latency < 100.0 { "GOOD" } else if avg_latency < 200.0 { "ACCEPTABLE" } else { "POOR" };
+    writeln!(file, "Average Latency,{},<50ms,{:.2}ms", latency_status, avg_latency)?;
+    
+    let max_latency = stats.max_latency_ms;
+    let max_latency_status = if max_latency < 500 { "EXCELLENT" } else if max_latency < 1000 { "GOOD" } else if max_latency < 2000 { "ACCEPTABLE" } else { "POOR" };
+    writeln!(file, "Maximum Latency,{},<500ms,{}ms", max_latency_status, max_latency)?;
+    
+    let tps = stats.total_requests as f64 / elapsed_secs;
+    let tps_status = if tps >= 1000.0 { "EXCELLENT" } else if tps >= 500.0 { "GOOD" } else if tps >= 100.0 { "ACCEPTABLE" } else { "POOR" };
+    writeln!(file, "Throughput (TPS),{},>=1000,{:.2}", tps_status, tps)?;
+    
+    writeln!(file, "")?;
+    writeln!(file, "End of Report")?;
+    
+    println!("📊 CSV Report generated: {}", filename);
+    println!("   Copy from container: kubectl cp corebank/<pod-name>:{} ./reports/", filename);
+    
     Ok(())
 }

@@ -93,3 +93,34 @@ echo "If Deadlocks occur:"
 echo "  - Review application logic"
 echo "  - Adjust deadlock_timeout"
 echo ""
+
+echo "=========================================="
+echo "  Collecting Performance Reports"
+echo "=========================================="
+echo ""
+
+# Collect all CSV reports from the pod
+./scripts/collect-reports.sh
+
+echo ""
+echo "=========================================="
+echo "  Generating Summary Report"
+echo "=========================================="
+echo ""
+
+# Generate consolidated summary report
+./scripts/generate-summary-report.sh
+
+echo ""
+echo "=========================================="
+echo "  📊 All Reports Ready!"
+echo "=========================================="
+echo ""
+echo "Individual test reports:"
+ls -lh ./reports/loadtest_*.csv 2>/dev/null | grep -v SUMMARY || echo "  No individual reports found"
+echo ""
+echo "Summary report:"
+ls -lh ./reports/SUMMARY_*.csv 2>/dev/null || echo "  No summary report found"
+echo ""
+echo "📁 All reports saved in: ./reports/"
+echo ""
