@@ -83,7 +83,8 @@ echo "=========================================="
 echo ""
 
 # Run load test
-kubectl exec -n corebank $POD_NAME -- /app/load-tester $TEST_TYPE $DURATION $CONCURRENT_USERS
+# load-tester runs inside the pod, so use localhost:8080
+kubectl exec -n corebank $POD_NAME -- /app/load-tester http://localhost:8080 $TEST_TYPE $CONCURRENT_USERS $DURATION
 
 echo ""
 echo "=========================================="

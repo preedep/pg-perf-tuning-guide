@@ -16,6 +16,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .connect(&database_url)
         .await?;
     
+    // Clear existing data
+    println!("Clearing existing data...");
+    sqlx::query("TRUNCATE TABLE ledger_entries, transactions, accounts CASCADE")
+        .execute(&pool)
+        .await?;
+    println!("Existing data cleared.");
+    
     println!("Starting to seed 100,000 accounts...");
     
     let mut rng = rand::rng();
