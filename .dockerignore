@@ -4,5 +4,5 @@ target/
 .env
 README.md
 k8s/
-scripts/
+scripts/*.sh
 *.md

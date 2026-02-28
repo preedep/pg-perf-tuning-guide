@@ -1908,6 +1908,7 @@ dependencies = [
  "chrono",
  "dotenv",
  "env_logger",
+ "fastrand",
  "log",
  "mockall",
  "rand 0.10.0",

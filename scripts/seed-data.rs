@@ -1,7 +1,7 @@
 use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
 use std::env;
-use rand::Rng;
+use rand::RngExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -18,7 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     println!("Starting to seed 100,000 accounts...");
     
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let batch_size = 1000;
     let total_accounts = 100_000;
     
@@ -28,8 +28,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         for i in 0..batch_size {
             let account_number = format!("ACC{:08}", batch * batch_size + i);
             let customer_id = format!("CUST{:08}", batch * batch_size + i);
-            let account_type = if rng.gen_bool(0.7) { "SAVINGS" } else { "CHECKING" };
-            let balance = rng.gen_range(1000.0..1000000.0);
+            let account_type = if rng.random::<f64>() < 0.7 { "SAVINGS" } else { "CHECKING" };
+            let balance = rng.random_range(1000.0..1000000.0);
             
             sqlx::query(
                 r#"

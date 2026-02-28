@@ -4,8 +4,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use std::env;
-use rand::{Rng, SeedableRng};
-use rand::rngs::StdRng;
 
 #[derive(Debug, Clone)]
 struct Stats {
@@ -65,10 +63,9 @@ async fn heavy_read_test(
     duration_secs: u64,
 ) {
     let start = Instant::now();
-    let mut rng = StdRng::from_entropy();
 
     while start.elapsed().as_secs() < duration_secs {
-        let account_num = rng.gen_range(0..100000);
+        let account_num = fastrand::u32(0..100000);
         let account_number = format!("ACC{:08}", account_num);
         
         let req_start = Instant::now();
@@ -92,14 +89,13 @@ async fn heavy_write_test(
     duration_secs: u64,
 ) {
     let start = Instant::now();
-    let mut rng = StdRng::from_entropy();
 
     while start.elapsed().as_secs() < duration_secs {
-        let from_account_num = rng.gen_range(0..100000);
-        let to_account_num = rng.gen_range(0..100000);
+        let from_account_num = fastrand::u32(0..100000);
+        let to_account_num = fastrand::u32(0..100000);
         let from_account = format!("ACC{:08}", from_account_num);
         let to_account = format!("ACC{:08}", to_account_num);
-        let amount = rng.gen_range(1.0..500.0);
+        let amount = fastrand::f64() * 499.0 + 1.0;
         
         let payload = json!({
             "from_account_number": from_account,
@@ -130,13 +126,12 @@ async fn mixed_load_test(
     duration_secs: u64,
 ) {
     let start = Instant::now();
-    let mut rng = StdRng::from_entropy();
 
     while start.elapsed().as_secs() < duration_secs {
-        let operation = rng.gen_range(0..100);
+        let operation = fastrand::u32(0..100);
         
         let (success, latency) = if operation < 60 {
-            let account_num = rng.gen_range(0..100000);
+            let account_num = fastrand::u32(0..100000);
             let account_number = format!("ACC{:08}", account_num);
             
             let req_start = Instant::now();
@@ -149,11 +144,11 @@ async fn mixed_load_test(
             let success = result.is_ok() && result.unwrap().status().is_success();
             (success, latency)
         } else {
-            let from_account_num = rng.gen_range(0..100000);
-            let to_account_num = rng.gen_range(0..100000);
+            let from_account_num = fastrand::u32(0..100000);
+            let to_account_num = fastrand::u32(0..100000);
             let from_account = format!("ACC{:08}", from_account_num);
             let to_account = format!("ACC{:08}", to_account_num);
-            let amount = rng.gen_range(1.0..500.0);
+            let amount = fastrand::f64() * 499.0 + 1.0;
             
             let payload = json!({
                 "from_account_number": from_account,
