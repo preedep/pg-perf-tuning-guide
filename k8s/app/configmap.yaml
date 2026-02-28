@@ -8,7 +8,7 @@ data:
   DATABASE_URL: "postgresql://postgres:postgres@postgres.corebank.svc.cluster.local:5432/corebank"
   # PgBouncer connection (uncomment to use)
   # DATABASE_URL: "postgresql://postgres:postgres@pgbouncer.corebank.svc.cluster.local:6432/corebank"
-  DATABASE_MAX_CONNECTIONS: "10"
+  DATABASE_MAX_CONNECTIONS: "5"
   SERVER_HOST: "0.0.0.0"
   SERVER_PORT: "8080"
   RUST_LOG: "info"
