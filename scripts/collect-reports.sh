@@ -17,24 +17,36 @@ echo ""
 
 # List available reports
 echo "Available reports in pod:"
-kubectl exec -n corebank $POD_NAME -- ls -lh /tmp/loadtest_*.csv 2>/dev/null || echo "No reports found yet"
+kubectl exec -n corebank $POD_NAME -- sh -c 'ls -lh /tmp/loadtest_*.csv 2>/dev/null' || echo "No reports found yet"
 echo ""
 
 # Copy all CSV reports from pod
 echo "Copying reports from pod to ./reports/ ..."
 REPORT_COUNT=0
 
-for report in $(kubectl exec -n corebank $POD_NAME -- ls /tmp/loadtest_*.csv 2>/dev/null); do
-    BASENAME=$(basename $report)
-    kubectl cp corebank/$POD_NAME:$report ./reports/$BASENAME
-    echo "  ✅ Copied: $BASENAME"
-    REPORT_COUNT=$((REPORT_COUNT + 1))
-done
+# Get list of reports
+REPORTS=$(kubectl exec -n corebank $POD_NAME -- sh -c 'ls /tmp/loadtest_*.csv 2>/dev/null' || echo "")
+
+if [ -z "$REPORTS" ]; then
+    echo "⚠️  No reports found in pod."
+else
+    for report in $REPORTS; do
+        BASENAME=$(basename $report)
+        kubectl cp corebank/$POD_NAME:$report ./reports/$BASENAME
+        echo "  ✅ Copied: $BASENAME"
+        REPORT_COUNT=$((REPORT_COUNT + 1))
+    done
+fi
 
 echo ""
 if [ $REPORT_COUNT -eq 0 ]; then
-    echo "⚠️  No reports found. Run performance tests first:"
+    echo "=========================================="
+    echo "  ⚠️  No Reports Collected"
+    echo "=========================================="
+    echo ""
+    echo "Run performance tests first:"
     echo "   ./scripts/run-load-test.sh mixed 60 10"
+    echo "   ./scripts/performance-test-suite.sh"
 else
     echo "=========================================="
     echo "  ✅ Collected $REPORT_COUNT report(s)"
