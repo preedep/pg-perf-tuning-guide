@@ -250,12 +250,12 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "rate(node_context_switches_total[1m])",
+              "expr": "quantile_over_time(0.95, rate(node_context_switches_total[1m])[5m:])",
               "refId": "A",
-              "legendFormat": "Context Switches/sec"
+              "legendFormat": "Context Switches/sec (P95)"
             }
           ],
-          "title": "Context Switches (Performance Impact)",
+          "title": "Context Switches (P95 - Performance Impact)",
           "type": "timeseries"
         },
         {

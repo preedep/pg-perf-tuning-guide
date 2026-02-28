@@ -42,6 +42,7 @@ struct Stats {
     total_latency_ms: u64,
     min_latency_ms: u64,
     max_latency_ms: u64,
+    latency_samples: Vec<u64>,
 }
 
 impl Stats {
@@ -53,6 +54,7 @@ impl Stats {
             total_latency_ms: 0,
             min_latency_ms: u64::MAX,
             max_latency_ms: 0,
+            latency_samples: Vec::new(),
         }
     }
 
@@ -66,6 +68,7 @@ impl Stats {
         self.total_latency_ms += latency_ms;
         self.min_latency_ms = self.min_latency_ms.min(latency_ms);
         self.max_latency_ms = self.max_latency_ms.max(latency_ms);
+        self.latency_samples.push(latency_ms);
     }
 
     fn avg_latency_ms(&self) -> f64 {
@@ -82,6 +85,18 @@ impl Stats {
         } else {
             0.0
         }
+    }
+
+    fn p95_latency_ms(&self) -> u64 {
+        if self.latency_samples.is_empty() {
+            return 0;
+        }
+        
+        let mut sorted = self.latency_samples.clone();
+        sorted.sort_unstable();
+        
+        let index = ((sorted.len() as f64) * 0.95) as usize;
+        sorted[index.min(sorted.len() - 1)]
     }
 }
 
@@ -343,6 +358,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("---");
     println!("Min Latency: {}ms", format_number(final_stats.min_latency_ms));
     println!("Avg Latency: {:.2}ms", final_stats.avg_latency_ms());
+    println!("P95 Latency: {}ms", format_number(final_stats.p95_latency_ms()));
     println!("Max Latency: {}ms", format_number(final_stats.max_latency_ms));
     println!("========================\n");
     
@@ -425,6 +441,7 @@ fn generate_csv_report(
     writeln!(file, "Metric,Value (ms)")?;
     writeln!(file, "Minimum Latency,{}", stats.min_latency_ms)?;
     writeln!(file, "Average Latency,{:.2}", stats.avg_latency_ms())?;
+    writeln!(file, "P95 Latency,{}", stats.p95_latency_ms())?;
     writeln!(file, "Maximum Latency,{}", stats.max_latency_ms)?;
     writeln!(file, "")?;
     
