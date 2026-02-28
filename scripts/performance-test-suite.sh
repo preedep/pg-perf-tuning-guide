@@ -1,0 +1,95 @@
+#!/bin/bash
+
+set -e
+
+echo "=========================================="
+echo "  PostgreSQL Performance Test Suite"
+echo "=========================================="
+echo ""
+echo "This script will run a comprehensive performance test suite:"
+echo "  1. Seed database with 100,000 accounts"
+echo "  2. Run heavy-read test (60s, 10 users)"
+echo "  3. Wait 30s for cooldown"
+echo "  4. Run heavy-write test (60s, 10 users)"
+echo "  5. Wait 30s for cooldown"
+echo "  6. Run mixed load test (120s, 20 users)"
+echo ""
+echo "Total estimated time: ~8 minutes"
+echo ""
+
+read -p "Continue? (y/n) " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "Cancelled."
+    exit 0
+fi
+
+echo ""
+echo "=========================================="
+echo "  Step 1/6: Seeding Database"
+echo "=========================================="
+./scripts/seed-database.sh
+
+echo ""
+echo "Waiting 10 seconds before starting tests..."
+sleep 10
+
+echo ""
+echo "=========================================="
+echo "  Step 2/6: Heavy Read Test"
+echo "=========================================="
+./scripts/run-load-test.sh heavy-read 60 10
+
+echo ""
+echo "Cooldown period (30 seconds)..."
+sleep 30
+
+echo ""
+echo "=========================================="
+echo "  Step 3/6: Heavy Write Test"
+echo "=========================================="
+./scripts/run-load-test.sh heavy-write 60 10
+
+echo ""
+echo "Cooldown period (30 seconds)..."
+sleep 30
+
+echo ""
+echo "=========================================="
+echo "  Step 4/6: Mixed Load Test"
+echo "=========================================="
+./scripts/run-load-test.sh mixed 120 20
+
+echo ""
+echo "=========================================="
+echo "  Performance Test Suite Completed! ✅"
+echo "=========================================="
+echo ""
+echo "📊 Review results in Grafana:"
+echo "   http://localhost:30030/d/postgresql-perf/postgresql-performance-tuning-dashboard"
+echo ""
+echo "📈 Performance Tuning Recommendations:"
+echo ""
+echo "Based on the metrics, consider tuning these PostgreSQL parameters:"
+echo ""
+echo "If Cache Hit Ratio < 95%:"
+echo "  - Increase shared_buffers"
+echo "  - Increase effective_cache_size"
+echo ""
+echo "If CPU IO Wait is high:"
+echo "  - Increase effective_io_concurrency"
+echo "  - Decrease random_page_cost (for SSD)"
+echo "  - Check disk performance"
+echo ""
+echo "If Context Switches are very high:"
+echo "  - Reduce max_connections"
+echo "  - Use connection pooling (PgBouncer is already configured)"
+echo ""
+echo "If Memory usage is high:"
+echo "  - Adjust work_mem"
+echo "  - Adjust maintenance_work_mem"
+echo ""
+echo "If Deadlocks occur:"
+echo "  - Review application logic"
+echo "  - Adjust deadlock_timeout"
+echo ""

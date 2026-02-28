@@ -20,6 +20,8 @@ RUN apk add --no-cache libgcc
 WORKDIR /app
 
 COPY --from=builder /app/target/release/pg-perf-tuning-guide /app/corebank-api
+COPY --from=builder /app/target/release/seed-data /app/seed-data
+COPY --from=builder /app/target/release/load-tester /app/load-tester
 COPY --from=builder /app/migrations /app/migrations
 
 ENV RUST_LOG=info

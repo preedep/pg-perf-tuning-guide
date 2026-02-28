@@ -98,13 +98,19 @@ src/
 git clone <repository-url>
 cd pg-perf-tuning-guide
 
-# สร้าง .env file
-cp .env.example .env
+# สร้าง .env file (สำหรับ local development)
+cat > .env << EOF
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/corebank
+RUST_LOG=info
+HOST=0.0.0.0
+PORT=8080
+EOF
 ```
 
 ### 2. Build Docker Image
 
 ```bash
+# Build image พร้อม seed-data และ load-tester binaries
 docker build -t corebank-api:latest .
 ```
 
@@ -114,23 +120,56 @@ docker build -t corebank-api:latest .
 # ให้สิทธิ์ execute scripts
 chmod +x scripts/*.sh
 
-# Deploy ทั้งหมด (PostgreSQL, Monitoring, Application)
+# Deploy ทั้งหมด (PostgreSQL, PgBouncer, Monitoring, Application)
 ./scripts/deploy.sh
 ```
 
-Script จะถามว่าต้องการติดตั้ง PgBouncer หรือไม่
+**Script จะ deploy:**
+- ✅ PostgreSQL 16 (StatefulSet)
+- ✅ PgBouncer (Connection Pooling)
+- ✅ Prometheus (Metrics Collection)
+- ✅ Grafana (Visualization) - Port **30030**
+- ✅ Node Exporter (System Metrics)
+- ✅ PostgreSQL Exporter (Database Metrics)
+- ✅ Corebank API (3 replicas)
+
+**หลัง deploy เสร็จ จะแสดง:**
+```
+========================================
+  Deployment Summary
+========================================
+
+Services:
+  - Grafana:     http://localhost:30030
+  - Prometheus:  http://localhost:30508
+  - API:         http://localhost:30080
+
+Grafana Credentials:
+  Username: admin
+  Password: admin
+
+Next Steps:
+  1. Seed database:
+     ./scripts/seed-database.sh
+
+  2. Run performance tests:
+     ./scripts/run-load-test.sh mixed 60 10
+
+  3. View metrics in Grafana:
+     http://localhost:30030/d/postgresql-perf/postgresql-performance-tuning-dashboard
+```
 
 ### 4. Seed ข้อมูล 100,000 บัญชี
 
 ```bash
-# วิธีที่ 1: รันจาก local (ต้อง port-forward ก่อน)
-kubectl port-forward -n corebank svc/postgres 5432:5432 &
-cargo run --bin seed-data
-
-# วิธีที่ 2: รันใน Kubernetes
-kubectl exec -it -n corebank postgres-0 -- bash
-# จากนั้นรัน seed script
+# ใช้ script ที่เตรียมไว้
+./scripts/seed-database.sh
 ```
+
+Script จะ:
+- ✅ ตรวจสอบว่า API pod พร้อมใช้งาน
+- ✅ Seed 100,000 accounts (ใช้เวลา 2-3 นาที)
+- ✅ Verify ข้อมูลหลัง seed เสร็จ
 
 ## 🗄️ โครงสร้างฐานข้อมูล
 
@@ -270,63 +309,108 @@ curl -X POST http://localhost:8080/api/v1/transactions/transfer \
 - แสดง **Latency** (Min, Avg, Max)
 - แสดง **Success Rate**
 
-### วิธีรัน Load Test
+### 🎯 Quick Start - Performance Test Suite
+
+รัน test suite ครบชุดด้วยคำสั่งเดียว:
+
+```bash
+./scripts/performance-test-suite.sh
+```
+
+**Test Suite จะรัน:**
+1. ✅ Seed database (100,000 accounts)
+2. ✅ Heavy-read test (60s, 10 users)
+3. ⏸️ Cooldown 30s
+4. ✅ Heavy-write test (60s, 10 users)
+5. ⏸️ Cooldown 30s
+6. ✅ Mixed load test (120s, 20 users)
+
+**ใช้เวลารวม:** ~8 นาที
+
+### 📊 รัน Load Test แบบเดียว
+
+#### วิธีใช้ Script
+
+```bash
+./scripts/run-load-test.sh [test-type] [duration] [concurrent-users]
+```
+
+**ตัวอย่าง:**
+
+```bash
+# Heavy Read Test (60 seconds, 10 concurrent users)
+./scripts/run-load-test.sh heavy-read 60 10
+
+# Heavy Write Test (120 seconds, 20 concurrent users)
+./scripts/run-load-test.sh heavy-write 120 20
+
+# Mixed Load Test (300 seconds, 50 concurrent users)
+./scripts/run-load-test.sh mixed 300 50
+```
+
+### 🔬 Test Types
 
 #### 1. Heavy Read Test - Balance Inquiry
 ทดสอบการตรวจสอบยอดเงิน (100% Read Operations)
 
 ```bash
-# รันจาก Kubernetes
-kubectl apply -f k8s/loadtest/job-heavy-read.yaml
-kubectl logs -n corebank -f job/loadtest-heavy-read
-
-# รันจาก local
-cargo run --bin load-tester -- http://localhost:8080 heavy-read 50 300
-# Parameters: <url> <test-type> <concurrency> <duration-seconds>
+./scripts/run-load-test.sh heavy-read 60 10
 ```
 
 **API ที่ทดสอบ**: `GET /api/v1/accounts/balance/{account_number}`
+
+**Database Operations:**
+- SELECT account by account_number
+- อ่าน balance
 
 #### 2. Heavy Write Test - Transfer
 ทดสอบการโอนเงินระหว่างบัญชี (100% Write Operations)
 
 ```bash
-kubectl apply -f k8s/loadtest/job-heavy-write.yaml
-kubectl logs -n corebank -f job/loadtest-heavy-write
-
-# หรือ
-cargo run --bin load-tester -- http://localhost:8080 heavy-write 30 300
+./scripts/run-load-test.sh heavy-write 60 10
 ```
 
 **API ที่ทดสอบ**: `POST /api/v1/transactions/transfer`
 
-**Database Operations**:
-- อ่าน 2 accounts (from + to)
-- อัพเดท balance 2 accounts
-- สร้าง 1 transaction
-- สร้าง 2 ledger entries
-- ทั้งหมดใน 1 transaction
+**Database Operations:**
+- SELECT 2 accounts (from + to) with FOR UPDATE
+- UPDATE balance 2 accounts
+- INSERT 1 transaction
+- INSERT 2 ledger entries
+- ทั้งหมดใน 1 database transaction
 
-#### 3. Mixed Load Test (60% Balance Inquiry, 40% Transfer)
-ทดสอบแบบ realistic workload
+#### 3. Mixed Load Test
+ทดสอบแบบ realistic workload (60% Read, 40% Write)
 
 ```bash
-kubectl apply -f k8s/loadtest/job-mixed-load.yaml
-kubectl logs -n corebank -f job/loadtest-mixed-load
-
-# หรือ
-cargo run --bin load-tester -- http://localhost:8080 mixed 50 300
+./scripts/run-load-test.sh mixed 120 20
 ```
 
-### ตัวอย่างผลลัพธ์
+**API ที่ทดสอบ:**
+- 60% Balance Inquiry
+- 40% Transfer
+
+### 📈 ตัวอย่างผลลัพธ์
 
 ```
+========================================
+  PostgreSQL Performance Load Test
+========================================
+
+Test Configuration:
+  Type:              mixed
+  Duration:          60 seconds
+  Concurrent Users:  10
+
+🚀 Load test started!
+========================================
+
 === Load Test Results ===
-Total Duration: 300.00s
-Total Requests: 45230
-Successful Requests: 45100
-Failed Requests: 130
-Success Rate: 99.71%
+Total Duration: 60.00s
+Total Requests: 9046
+Successful Requests: 9012
+Failed Requests: 34
+Success Rate: 99.62%
 ---
 TPS (Transactions Per Second): 150.77
 QPS (Queries Per Second): 150.77
@@ -335,56 +419,130 @@ Min Latency: 12ms
 Avg Latency: 45.23ms
 Max Latency: 523ms
 ========================
+
+✅ Load test completed!
+========================================
+
+📊 View detailed metrics in Grafana:
+   http://localhost:30030/d/postgresql-perf/postgresql-performance-tuning-dashboard
 ```
 
 ## 📊 การตรวจสอบและ Monitoring
 
-### เข้าถึง Grafana
+### 🎨 เข้าถึง Grafana Dashboard
 
 ```bash
-# ดู NodePort ของ Grafana
-kubectl get svc -n corebank grafana
+# เปิด browser ที่
+http://localhost:30030
 
-# เข้าถึงผ่าน browser
-# http://localhost:<NodePort>
-# Username: admin
-# Password: admin
+# Login (หรือใช้ anonymous access)
+Username: admin
+Password: admin
 ```
 
-### เข้าถึง Prometheus
+**Dashboard URL:**
+```
+http://localhost:30030/d/postgresql-perf/postgresql-performance-tuning-dashboard
+```
+
+### 📈 PostgreSQL Performance Tuning Dashboard
+
+Dashboard มี **11 panels** สำหรับ performance tuning:
+
+#### 🔥 Core Performance Metrics
+1. **Transactions Per Second (TPS)**
+   - วัดจำนวน transactions ที่ commit + rollback
+   - ควรเพิ่มขึ้นตอน load test
+
+2. **Cache Hit Ratio** (Gauge)
+   - วัดประสิทธิภาพของ shared_buffers
+   - **เป้าหมาย: >95%** (สีเขียว)
+   - <90% = ต้องเพิ่ม shared_buffers
+
+#### ⚡ System Resources
+3. **Context Switches** (Performance Impact)
+   - วัดจำนวน context switches per second
+   - สูงเกินไป = CPU thrashing
+   - **Tuning:** ลด max_connections, ใช้ PgBouncer
+
+4. **CPU Usage Breakdown**
+   - CPU Usage %
+   - IO Wait % (สูง = disk bottleneck)
+   - System %
+
+5. **Memory Usage**
+   - Used Memory
+   - Cache + Buffers
+   - Available
+   - **Tuning:** shared_buffers, work_mem
+
+#### 🔧 Database Tuning Metrics
+6. **Database Connections**
+   - Active Connections vs Max Connections
+   - **Tuning:** max_connections
+
+7. **Disk I/O**
+   - Disk Read/Write throughput
+   - **Tuning:** effective_io_concurrency, random_page_cost
+
+8. **Active Connections & Deadlocks**
+   - จำนวน active connections
+   - Deadlocks (ควรเป็น 0)
+   - **Tuning:** deadlock_timeout
+
+9. **Table Bloat - Dead Tuples**
+   - Dead tuples ต่อ table
+   - **Tuning:** autovacuum settings
+
+10. **Database Activity**
+    - Inserts/sec
+    - Updates/sec
+    - Deletes/sec
+
+11. **Block I/O**
+    - Disk Blocks Read/sec
+    - Cache Blocks Hit/sec
+    - **Tuning:** shared_buffers, effective_cache_size
+
+### 🔍 เข้าถึง Prometheus
 
 ```bash
-kubectl get svc -n corebank prometheus
-# http://localhost:<NodePort>
+http://localhost:30508
+
+# Query ตัวอย่าง
+pg_stat_database_numbackends{datname="corebank"}
+rate(pg_stat_database_xact_commit[1m])
+node_context_switches_total
 ```
 
-### Metrics ที่ติดตาม
+### 📊 Metrics ที่ติดตาม
 
-#### PostgreSQL Metrics
-- **Connections**: จำนวน active connections
-- **TPS**: Transactions per second
-- **Cache Hit Ratio**: ประสิทธิภาพ cache
-- **Query Duration**: เวลาในการ execute queries
-- **Locks**: จำนวน locks ในระบบ
-- **Table Bloat**: Dead tuples
+#### PostgreSQL Metrics (จาก postgres-exporter)
+- ✅ `pg_stat_database_*` - Database statistics
+- ✅ `pg_settings_*` - PostgreSQL configuration
+- ✅ `pg_stat_bgwriter_*` - Background writer stats
+- ✅ `pg_stat_user_tables_*` - Table statistics
+- ✅ `pg_up` - Database availability
 
-#### System Metrics
-- **CPU Usage**: การใช้งาน CPU
-- **Memory Usage**: การใช้งาน RAM
-- **Disk I/O**: การอ่าน/เขียน disk
-- **Context Switches**: จำนวน context switches (สำคัญสำหรับ performance)
+#### System Metrics (จาก node-exporter)
+- ✅ `node_context_switches_total` - Context switches
+- ✅ `node_cpu_seconds_total` - CPU usage
+- ✅ `node_memory_*` - Memory metrics
+- ✅ `node_disk_*` - Disk I/O metrics
 
-### Grafana Dashboards
+### 🎯 การใช้งาน Dashboard
 
-Dashboard ที่สร้างไว้แล้ว:
-1. **PostgreSQL Performance Dashboard**
-   - Database connections
-   - Transaction rate
-   - Query performance
-   - Cache efficiency
-   - Lock monitoring
-   - Context switching
-   - Resource usage
+**ระหว่าง Load Test:**
+1. เปิด Dashboard ก่อนรัน test
+2. ตั้ง Time Range = "Last 5 minutes"
+3. ตั้ง Refresh = "5s"
+4. รัน load test
+5. สังเกต metrics real-time
+
+**หลัง Load Test:**
+1. ตั้ง Time Range ให้ครอบคลุมช่วงที่ test
+2. ดู peak values ใน legend
+3. Export หรือ screenshot สำหรับเปรียบเทียบ
 
 ## ⚙️ PostgreSQL Tuning Configurations
 
@@ -463,27 +621,32 @@ kubectl rollout restart deployment/corebank-api -n corebank
 ```
 pg-perf-tuning-guide/
 ├── src/
-│   ├── domain/              # Domain layer
-│   ├── application/         # Application layer
-│   ├── infrastructure/      # Infrastructure layer
+│   ├── domain/              # Domain layer (Business logic)
+│   ├── application/         # Application layer (Use cases)
+│   ├── infrastructure/      # Infrastructure layer (DB, Web)
 │   └── main.rs
-├── migrations/              # Database migrations
+├── migrations/              # Database migrations (SQL)
 ├── k8s/                     # Kubernetes manifests
 │   ├── namespace.yaml
-│   ├── postgres/            # PostgreSQL configs
-│   ├── pgbouncer/           # PgBouncer configs
-│   ├── app/                 # Application configs
-│   ├── monitoring/          # Prometheus & Grafana
-│   └── loadtest/            # Load test jobs
+│   ├── postgres/            # PostgreSQL StatefulSet & configs
+│   ├── pgbouncer/           # PgBouncer deployment
+│   ├── app/                 # Application deployment & configs
+│   └── monitoring/          # Prometheus, Grafana, Exporters
 ├── scripts/
-│   ├── seed-data.rs         # Data seeding tool
-│   ├── load-tester.rs       # Load testing tool
-│   ├── deploy.sh            # Deployment script
-│   ├── switch-to-tuned-config.sh
-│   └── cleanup.sh
-├── Dockerfile
-├── Cargo.toml
-└── README.md
+│   ├── seed-data.rs         # Data seeding binary (100k accounts)
+│   ├── load-tester.rs       # Load testing binary (Rust)
+│   ├── deploy.sh            # Main deployment script
+│   ├── seed-database.sh     # Seed database script
+│   ├── run-load-test.sh     # Run load test script
+│   ├── performance-test-suite.sh  # Full test suite
+│   └── cleanup.sh           # Cleanup script
+├── docs/
+│   ├── ARCHITECTURE.md      # Architecture documentation
+│   └── PERFORMANCE_TUNING_GUIDE.md  # Performance tuning guide
+├── Dockerfile               # Multi-stage build
+├── Cargo.toml              # Rust dependencies
+├── .env                    # Environment variables
+└── README.md               # This file
 ```
 
 ## 🎓 การทดสอบที่แนะนำ
@@ -508,6 +671,26 @@ pg-perf-tuning-guide/
 1. เพิ่ม concurrency ใน load test
 2. ตรวจสอบ context switching
 3. ดู resource limits
+
+## 📚 เอกสารเพิ่มเติม
+
+### Architecture Documentation
+รายละเอียดสถาปัตยกรรมระบบ, Clean Architecture layers, และ deployment architecture
+
+👉 **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
+
+### Performance Tuning Guide
+คู่มือการ tune PostgreSQL parameters ตาม metrics ที่เห็นใน Grafana Dashboard
+
+👉 **[docs/PERFORMANCE_TUNING_GUIDE.md](docs/PERFORMANCE_TUNING_GUIDE.md)**
+
+**เนื้อหาใน Performance Tuning Guide:**
+- 📊 วิธีอ่าน metrics จาก dashboard แต่ละ panel
+- ⚙️ PostgreSQL parameters ที่ควร tune
+- 🎯 เป้าหมายของแต่ละ metric
+- 🔧 วิธีแก้ปัญหาเมื่อ metrics ผิดปกติ
+- ✅ Tuning checklist สำหรับ workload แต่ละแบบ
+- 📈 Performance testing workflow
 
 ## 🐛 Troubleshooting
 
