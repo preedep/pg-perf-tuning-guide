@@ -5,6 +5,23 @@ use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use std::env;
 
+// Helper function to format numbers with commas
+fn format_number(n: u64) -> String {
+    let s = n.to_string();
+    let mut result = String::new();
+    let mut count = 0;
+    
+    for c in s.chars().rev() {
+        if count > 0 && count % 3 == 0 {
+            result.push(',');
+        }
+        result.push(c);
+        count += 1;
+    }
+    
+    result.chars().rev().collect()
+}
+
 #[derive(Debug, Clone)]
 struct Stats {
     total_requests: u64,
@@ -232,9 +249,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let stats = stats_clone.lock().await;
             println!(
                 "[Progress] Requests: {}, Success: {}, Failed: {}, Avg Latency: {:.2}ms",
-                stats.total_requests,
-                stats.successful_requests,
-                stats.failed_requests,
+                format_number(stats.total_requests),
+                format_number(stats.successful_requests),
+                format_number(stats.failed_requests),
                 stats.avg_latency_ms()
             );
         }
@@ -251,17 +268,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     println!("\n=== Load Test Results ===");
     println!("Total Duration: {:.2}s", elapsed.as_secs_f64());
-    println!("Total Requests: {}", final_stats.total_requests);
-    println!("Successful Requests: {}", final_stats.successful_requests);
-    println!("Failed Requests: {}", final_stats.failed_requests);
+    println!("Total Requests: {}", format_number(final_stats.total_requests));
+    println!("Successful Requests: {}", format_number(final_stats.successful_requests));
+    println!("Failed Requests: {}", format_number(final_stats.failed_requests));
     println!("Success Rate: {:.2}%", final_stats.success_rate());
     println!("---");
     println!("TPS (Transactions Per Second): {:.2}", final_stats.total_requests as f64 / elapsed.as_secs_f64());
     println!("QPS (Queries Per Second): {:.2}", final_stats.total_requests as f64 / elapsed.as_secs_f64());
     println!("---");
-    println!("Min Latency: {}ms", final_stats.min_latency_ms);
+    println!("Min Latency: {}ms", format_number(final_stats.min_latency_ms));
     println!("Avg Latency: {:.2}ms", final_stats.avg_latency_ms());
-    println!("Max Latency: {}ms", final_stats.max_latency_ms);
+    println!("Max Latency: {}ms", format_number(final_stats.max_latency_ms));
     println!("========================\n");
     
     Ok(())
