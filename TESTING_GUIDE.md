@@ -41,7 +41,14 @@ cargo run --bin seed-data
 kubectl exec -it -n corebank postgres-0 -- psql -U postgres -d corebank -c "SELECT COUNT(*) FROM accounts;"
 ```
 
-### 3. เปิด Grafana
+### 3. ตรวจสอบ Connection Mode
+
+```bash
+# ตรวจสอบว่าตอนนี้ใช้ Direct PostgreSQL หรือ PgBouncer
+./scripts/check-connection-mode.sh
+```
+
+### 4. เปิด Grafana
 
 ```bash
 # ดู NodePort
@@ -147,6 +154,101 @@ kubectl logs -n corebank -f job/loadtest-mixed-load
 |--------|-------------|
 | TPS | +20-30% |
 | Avg Latency | -15-25% |
+
+### Scenario 3: Direct PostgreSQL vs PgBouncer Comparison
+
+**วัตถุประสงค์**: เปรียบเทียบประสิทธิภาพระหว่างการเชื่อมต่อโดยตรงกับ PostgreSQL และผ่าน PgBouncer
+
+#### Part A: Test with Direct PostgreSQL Connection
+
+1. **Switch to Direct PostgreSQL**
+```bash
+./scripts/switch-to-direct.sh
+```
+
+2. **ตรวจสอบ Connection Mode**
+```bash
+./scripts/check-connection-mode.sh
+# ควรเห็น: Mode: Direct PostgreSQL
+```
+
+3. **รัน Performance Test Suite**
+```bash
+./scripts/performance-test-suite.sh
+```
+
+4. **บันทึกผลลัพธ์**
+- TPS (Transactions Per Second)
+- Average Latency
+- Context Switches (จาก Grafana)
+- CPU Usage (จาก Grafana)
+- Active Connections (จาก Grafana)
+
+5. **Collect Reports**
+```bash
+./scripts/collect-reports.sh
+```
+
+#### Part B: Test with PgBouncer
+
+1. **Switch to PgBouncer**
+```bash
+./scripts/switch-to-pgbouncer.sh
+```
+
+2. **ตรวจสอบ Connection Mode**
+```bash
+./scripts/check-connection-mode.sh
+# ควรเห็น: Mode: PgBouncer
+```
+
+3. **รัน Performance Test Suite**
+```bash
+./scripts/performance-test-suite.sh
+```
+
+4. **บันทึกผลลัพธ์**
+- TPS (Transactions Per Second)
+- Average Latency
+- Context Switches (จาก Grafana)
+- CPU Usage (จาก Grafana)
+- Backend Connections (จาก Grafana)
+- PgBouncer Pool Stats
+
+5. **Collect Reports**
+```bash
+./scripts/collect-reports.sh
+```
+
+#### Expected Results Comparison:
+
+| Metric | Direct PostgreSQL | PgBouncer | Improvement |
+|--------|-------------------|-----------|-------------|
+| **Backend Processes** | 30-35 | 10-15 | -60-70% ✅ |
+| **Context Switches** | 80-150K/s | 15-30K/s | -75-85% ✅ |
+| **TPS (Heavy Read)** | 40-50 | 80-120 | +100-150% ✅ |
+| **TPS (Heavy Write)** | 30-40 | 60-90 | +100-125% ✅ |
+| **TPS (Mixed)** | 35-45 | 70-100 | +100-120% ✅ |
+| **Avg Latency** | 50-80ms | 20-40ms | -40-60% ✅ |
+| **CPU Usage** | 15-25% | 8-15% | -30-50% ✅ |
+| **Memory Usage** | 2-3GB | 1.5-2GB | -20-30% ✅ |
+
+#### Key Observations:
+
+**Direct PostgreSQL:**
+- ✅ Simple architecture
+- ❌ High context switches (process-based model)
+- ❌ Many backend processes
+- ❌ Higher CPU overhead
+- ❌ Lower throughput
+
+**PgBouncer:**
+- ✅ Connection pooling reduces backend processes
+- ✅ Dramatically lower context switches
+- ✅ Better CPU efficiency
+- ✅ Higher throughput (2-3x improvement)
+- ✅ Lower latency
+- ⚠️ Additional component to manage
 | Cache Hit Ratio | +5-10% |
 | Context Switches | -10-20% |
 
