@@ -1,0 +1,28 @@
+# Build stage
+FROM rust:1.75-alpine as builder
+
+RUN apk add --no-cache musl-dev openssl-dev
+
+WORKDIR /app
+
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+COPY migrations ./migrations
+
+RUN cargo build --release
+
+# Runtime stage
+FROM alpine:latest
+
+RUN apk add --no-cache libgcc
+
+WORKDIR /app
+
+COPY --from=builder /app/target/release/pg-perf-tuning-guide /app/corebank-api
+COPY --from=builder /app/migrations /app/migrations
+
+ENV RUST_LOG=info
+
+EXPOSE 8080
+
+CMD ["/app/corebank-api"]

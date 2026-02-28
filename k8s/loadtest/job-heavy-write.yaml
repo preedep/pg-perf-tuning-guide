@@ -1,0 +1,25 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: loadtest-heavy-write
+  namespace: corebank
+spec:
+  template:
+    metadata:
+      labels:
+        app: loadtest
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: loadtest
+        image: corebank-api:latest
+        imagePullPolicy: Never
+        command: ["/app/load-tester"]
+        args: ["http://corebank-api:8080", "heavy-write", "30", "300"]
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "500m"
+          limits:
+            memory: "256Mi"
+            cpu: "1000m"

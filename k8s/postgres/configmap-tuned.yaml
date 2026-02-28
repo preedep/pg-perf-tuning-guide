@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config-tuned
+  namespace: corebank
+data:
+  POSTGRES_DB: corebank
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  # Tuned PostgreSQL configuration for performance
+  postgresql.conf: |
+    # Connection Settings
+    listen_addresses = '*'
+    max_connections = 200
+    
+    # Memory Settings
+    shared_buffers = 2GB
+    effective_cache_size = 6GB
+    maintenance_work_mem = 512MB
+    work_mem = 16MB
+    
+    # WAL Settings
+    wal_buffers = 16MB
+    min_wal_size = 2GB
+    max_wal_size = 8GB
+    checkpoint_completion_target = 0.9
+    checkpoint_timeout = 15min
+    
+    # Query Planner
+    default_statistics_target = 100
+    random_page_cost = 1.1
+    effective_io_concurrency = 200
+    
+    # Write Performance
+    synchronous_commit = off
+    wal_writer_delay = 200ms
+    commit_delay = 100
+    commit_siblings = 5
+    
+    # Logging
+    log_min_duration_statement = 1000
+    log_checkpoints = on
+    log_connections = on
+    log_disconnections = on
+    log_lock_waits = on
+    
+    # Autovacuum
+    autovacuum = on
+    autovacuum_max_workers = 4
+    autovacuum_naptime = 10s

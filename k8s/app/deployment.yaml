@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: corebank-api
+  namespace: corebank
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: corebank-api
+  template:
+    metadata:
+      labels:
+        app: corebank-api
+    spec:
+      containers:
+      - name: corebank-api
+        image: corebank-api:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+          name: http
+        envFrom:
+        - configMapRef:
+            name: app-config
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "1000m"

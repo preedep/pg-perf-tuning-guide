@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loadtest-scripts
+  namespace: corebank
+data:
+  heavy-read.sh: |
+    #!/bin/sh
+    echo "Starting Heavy Read Test..."
+    /app/load-tester http://corebank-api:8080 heavy-read 50 300
+  
+  heavy-write.sh: |
+    #!/bin/sh
+    echo "Starting Heavy Write Test..."
+    /app/load-tester http://corebank-api:8080 heavy-write 30 300
+  
+  mixed-load.sh: |
+    #!/bin/sh
+    echo "Starting Mixed Load Test..."
+    /app/load-tester http://corebank-api:8080 mixed 50 300

@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config-default
+  namespace: corebank
+data:
+  POSTGRES_DB: corebank
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  # Default PostgreSQL configuration - no tuning
+  postgresql.conf: |
+    # Default configuration
+    listen_addresses = '*'
+    max_connections = 100
+    shared_buffers = 128MB
+    effective_cache_size = 4GB
+    maintenance_work_mem = 64MB
+    checkpoint_completion_target = 0.9
+    wal_buffers = -1
+    default_statistics_target = 100
+    random_page_cost = 4.0
+    effective_io_concurrency = 2
+    work_mem = 4MB
+    min_wal_size = 1GB
+    max_wal_size = 4GB

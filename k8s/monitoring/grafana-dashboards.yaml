@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: corebank
+data:
+  postgresql-dashboard.json: |
+    {
+      "dashboard": {
+        "title": "PostgreSQL Performance Dashboard",
+        "panels": [
+          {
+            "title": "Database Connections",
+            "targets": [
+              {
+                "expr": "pg_stat_database_numbackends{datname=\"corebank\"}"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "title": "Transactions Per Second",
+            "targets": [
+              {
+                "expr": "rate(pg_stat_database_xact_commit{datname=\"corebank\"}[1m])"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "title": "Query Duration",
+            "targets": [
+              {
+                "expr": "pg_stat_statements_mean_exec_time_seconds"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "title": "Cache Hit Ratio",
+            "targets": [
+              {
+                "expr": "pg_stat_database_blks_hit{datname=\"corebank\"} / (pg_stat_database_blks_hit{datname=\"corebank\"} + pg_stat_database_blks_read{datname=\"corebank\"})"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "title": "Locks",
+            "targets": [
+              {
+                "expr": "pg_locks_count"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "title": "Context Switches",
+            "targets": [
+              {
+                "expr": "rate(node_context_switches_total[1m])"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "title": "CPU Usage",
+            "targets": [
+              {
+                "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "title": "Memory Usage",
+            "targets": [
+              {
+                "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "title": "Disk I/O",
+            "targets": [
+              {
+                "expr": "rate(node_disk_io_time_seconds_total[1m])"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "title": "Table Bloat",
+            "targets": [
+              {
+                "expr": "pg_stat_user_tables_n_dead_tup"
+              }
+            ],
+            "type": "graph"
+          }
+        ]
+      }
+    }

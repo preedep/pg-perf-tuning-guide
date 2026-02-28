@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: corebank
+data:
+  # Direct PostgreSQL connection
+  DATABASE_URL: "postgresql://postgres:postgres@postgres.corebank.svc.cluster.local:5432/corebank"
+  # PgBouncer connection (uncomment to use)
+  # DATABASE_URL: "postgresql://postgres:postgres@pgbouncer.corebank.svc.cluster.local:6432/corebank"
+  DATABASE_MAX_CONNECTIONS: "10"
+  SERVER_HOST: "0.0.0.0"
+  SERVER_PORT: "8080"
+  RUST_LOG: "info"
