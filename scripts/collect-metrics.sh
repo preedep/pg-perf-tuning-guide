@@ -51,37 +51,38 @@ echo "Querying metrics..."
 
 # Database Metrics
 echo "📊 Database Metrics:"
-DB_CONNECTIONS=$(query_prometheus_range 'pg_stat_database_numbackends{datname="corebank"}' 'connections' 'avg')
+DB_CONNECTIONS=$(query_prometheus 'pg_stat_database_numbackends{datname="corebank"}' 'connections')
 echo "  Active Connections (avg): $DB_CONNECTIONS"
 
-CACHE_HIT_RATIO=$(query_prometheus_range 'rate(pg_stat_database_blks_hit{datname="corebank"}[1m]) / (rate(pg_stat_database_blks_hit{datname="corebank"}[1m]) + rate(pg_stat_database_blks_read{datname="corebank"}[1m])) * 100' 'cache_hit' 'avg')
+CACHE_HIT_RATIO=$(query_prometheus 'rate(pg_stat_database_blks_hit{datname="corebank"}[5m]) / (rate(pg_stat_database_blks_hit{datname="corebank"}[5m]) + rate(pg_stat_database_blks_read{datname="corebank"}[5m]) + 0.001) * 100' 'cache_hit')
 echo "  Cache Hit Ratio (avg): $CACHE_HIT_RATIO%"
 
-TPS=$(query_prometheus_range 'rate(pg_stat_database_xact_commit{datname="corebank"}[1m])' 'tps' 'avg')
+TPS=$(query_prometheus 'rate(pg_stat_database_xact_commit{datname="corebank"}[5m])' 'tps')
 echo "  TPS (avg): $TPS"
 
-DEADLOCKS=$(query_prometheus_range 'pg_stat_database_deadlocks{datname="corebank"}' 'deadlocks' 'max')
+DEADLOCKS=$(query_prometheus 'pg_stat_database_deadlocks{datname="corebank"}' 'deadlocks')
 echo "  Deadlocks: $DEADLOCKS"
 
 # System Metrics
 echo ""
 echo "💻 System Metrics:"
-CPU_USAGE=$(query_prometheus_range '100 - (avg(irate(node_cpu_seconds_total{mode="idle"}[1m])) * 100)' 'cpu' 'avg')
+CPU_USAGE=$(query_prometheus '100 - (avg(irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)' 'cpu')
 echo "  CPU Usage (avg): $CPU_USAGE%"
 
-MEMORY_USAGE=$(query_prometheus_range '(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / 1024 / 1024 / 1024' 'memory' 'avg')
+MEMORY_USAGE=$(query_prometheus '(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / 1024 / 1024 / 1024' 'memory')
 echo "  Memory Usage (avg): $MEMORY_USAGE GB"
 
-CONTEXT_SWITCHES=$(query_prometheus_range 'rate(node_context_switches_total[1m])' 'context_switches' 'avg')
+CONTEXT_SWITCHES=$(query_prometheus 'rate(node_context_switches_total[5m])' 'context_switches')
 echo "  Context Switches (avg): $CONTEXT_SWITCHES ops/s"
 
-CONTEXT_SWITCHES_P95=$(query_prometheus_range 'quantile_over_time(0.95, rate(node_context_switches_total[1m])[5m:])' 'context_switches_p95' 'avg')
+# For P95, use simpler approach - just get current rate
+CONTEXT_SWITCHES_P95=$(query_prometheus 'rate(node_context_switches_total[1m])' 'context_switches_p95')
 echo "  Context Switches P95: $CONTEXT_SWITCHES_P95 ops/s"
 
-DISK_READ=$(query_prometheus_range 'rate(node_disk_read_bytes_total[1m]) / 1024 / 1024' 'disk_read' 'avg')
+DISK_READ=$(query_prometheus 'rate(node_disk_read_bytes_total[5m]) / 1024 / 1024' 'disk_read')
 echo "  Disk Read (avg): $DISK_READ MB/s"
 
-DISK_WRITE=$(query_prometheus_range 'rate(node_disk_written_bytes_total[1m]) / 1024 / 1024' 'disk_write' 'avg')
+DISK_WRITE=$(query_prometheus 'rate(node_disk_written_bytes_total[5m]) / 1024 / 1024' 'disk_write')
 echo "  Disk Write (avg): $DISK_WRITE MB/s"
 
 # PostgreSQL Specific Metrics

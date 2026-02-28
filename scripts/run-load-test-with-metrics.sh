@@ -46,6 +46,24 @@ echo "Running load test..."
 # Record end time
 END_TIME=$(date +%s)
 
+# Copy CSV report from container
+echo ""
+echo "Copying CSV report from container..."
+POD_NAME=$(kubectl get pod -n corebank -l app=corebank-api -o jsonpath='{.items[0].metadata.name}')
+REMOTE_CSV=$(kubectl exec -n corebank $POD_NAME -- sh -c "ls -t /tmp/loadtest_${TEST_TYPE}_*.csv 2>/dev/null | head -n 1" 2>/dev/null || echo "")
+
+if [ -n "$REMOTE_CSV" ]; then
+    mkdir -p /tmp
+    kubectl cp "corebank/${POD_NAME}:${REMOTE_CSV}" "${REMOTE_CSV}" 2>/dev/null
+    if [ -f "$REMOTE_CSV" ]; then
+        echo "✅ CSV copied: $REMOTE_CSV"
+    else
+        echo "⚠️  Warning: Could not copy CSV file"
+    fi
+else
+    echo "⚠️  Warning: No CSV file found in container"
+fi
+
 echo ""
 echo "Collecting metrics from Prometheus..."
 ./scripts/collect-metrics.sh "$TEST_TYPE" "$START_TIME" "$END_TIME"

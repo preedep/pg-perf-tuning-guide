@@ -66,17 +66,18 @@ APP_DURATION=$(grep "^Duration" "$APP_CSV" | cut -d',' -f2)
 
 # Create professional consolidated CSV report
 cat > "$REPORT_CSV" <<EOF
-═══════════════════════════════════════════════════════════════════════════════
+===============================================================================
 POSTGRESQL PERFORMANCE TEST REPORT
-═══════════════════════════════════════════════════════════════════════════════
+===============================================================================
 Generated,$(date +"%Y-%m-%d %H:%M:%S")
 Test Type,$TEST_TYPE
 Test Duration,$APP_DURATION seconds
 Concurrent Users,$APP_CONCURRENCY
-
-═══════════════════════════════════════════════════════════════════════════════
+,
+===============================================================================
 SECTION 1: EXECUTIVE SUMMARY
-═══════════════════════════════════════════════════════════════════════════════
+===============================================================================
+,
 
 Key Performance Indicators
 Metric,Value,Unit,Status
@@ -84,30 +85,30 @@ Application Throughput,$APP_TPS,requests/sec,Primary KPI
 Success Rate,$APP_SUCCESS_RATE,%,✓ Target: 100%
 Average Latency,$APP_AVG_LATENCY,ms,Lower is better
 P95 Latency,$APP_P95_LATENCY,ms,95% of requests
-Cache Hit Ratio,$CACHE_HIT_RATIO,%,✓ Target: >95%
+Cache Hit Ratio,$CACHE_HIT_RATIO,%,Target >95%
 Database Connections,$DB_CONNECTIONS,connections,Active backends
-
-═══════════════════════════════════════════════════════════════════════════════
+,
+===============================================================================
 SECTION 2: APPLICATION METRICS (Load Tester)
-═══════════════════════════════════════════════════════════════════════════════
-
+===============================================================================
+,
 Throughput & Volume
 Metric,Value,Unit
 Total Requests,$APP_TOTAL_REQUESTS,requests
 Requests Per Second (TPS),$APP_TPS,req/s
 Success Rate,$APP_SUCCESS_RATE,%
-
+,
 Latency Distribution
 Metric,Value (ms),Percentile
 Minimum,$APP_MIN_LATENCY,0th (best case)
 Average,$APP_AVG_LATENCY,50th (typical)
 P95,$APP_P95_LATENCY,95th (most requests)
 Maximum,$APP_MAX_LATENCY,100th (worst case)
-
-═══════════════════════════════════════════════════════════════════════════════
+,
+===============================================================================
 SECTION 3: DATABASE METRICS (PostgreSQL via Prometheus)
-═══════════════════════════════════════════════════════════════════════════════
-
+===============================================================================
+,
 Connection & Transaction Metrics
 Metric,Value,Unit,Note
 Active Connections (avg),$DB_CONNECTIONS,connections,Backend processes
@@ -119,69 +120,71 @@ PostgreSQL Configuration
 Parameter,Value,Unit
 Max Connections,$MAX_CONNECTIONS,connections
 Shared Buffers,$SHARED_BUFFERS,GB
-
-═══════════════════════════════════════════════════════════════════════════════
+,
+===============================================================================
 SECTION 4: SYSTEM RESOURCES (Node Exporter via Prometheus)
-═══════════════════════════════════════════════════════════════════════════════
-
+===============================================================================
+,
 CPU & Memory
 Metric,Value,Unit,Note
 CPU Usage (avg),$CPU_USAGE,%,Overall CPU utilization
 Memory Usage (avg),$MEMORY_USAGE,GB,RAM consumption
-
+,
 Context Switching (Performance Impact)
 Metric,Value,Unit,Note
 Context Switches (avg),$CONTEXT_SWITCHES,ops/s,Average rate
 Context Switches (P95),$CONTEXT_SWITCHES_P95,ops/s,95th percentile
-
+,
 Disk I/O
 Metric,Value,Unit
 Disk Read (avg),$DISK_READ,MB/s
 Disk Write (avg),$DISK_WRITE,MB/s
-
-═══════════════════════════════════════════════════════════════════════════════
+,
+===============================================================================
 SECTION 5: PERFORMANCE ANALYSIS
-═══════════════════════════════════════════════════════════════════════════════
-
+===============================================================================
+,
 Application vs Database Perspective
 Metric,Application View,Database View,Explanation
 Throughput,$APP_TPS req/s,$DB_TPS tx/s,App TPS = HTTP requests; DB TPS = committed transactions
 Connections,N/A,$DB_CONNECTIONS,Backend connections to PostgreSQL
 Latency (P95),$APP_P95_LATENCY ms,N/A,End-to-end user experience
 Cache Efficiency,N/A,$CACHE_HIT_RATIO%,Higher = less disk I/O
-
+,
 Resource Utilization
 Resource,Usage,Status,Recommendation
-CPU,$CPU_USAGE%,$([ "${CPU_USAGE%.*}" -lt 70 ] 2>/dev/null && echo "✓ Good" || echo "⚠ High"),Target <70% for headroom
-Memory,$MEMORY_USAGE GB,✓ Monitored,Ensure sufficient for shared_buffers
+CPU,$CPU_USAGE%,Monitored,Target <70% for headroom
+Memory,$MEMORY_USAGE GB,Monitored,Ensure sufficient for shared_buffers
 Context Switches,$CONTEXT_SWITCHES_P95 ops/s,Monitored,Lower is better for given throughput
-
-═══════════════════════════════════════════════════════════════════════════════
+,
+===============================================================================
 SECTION 6: NOTES & METHODOLOGY
-═══════════════════════════════════════════════════════════════════════════════
-
+===============================================================================
+,
 Data Collection Methods
 Source,Metrics Collected,Method
 Load Tester,Application TPS / Latency / Success Rate,Direct HTTP measurement
 Prometheus,Database connections / TPS / Cache hit ratio,PostgreSQL Exporter
 Prometheus,CPU / Memory / Context switches / Disk I/O,Node Exporter
-
+,
 Metric Definitions
-- TPS (Application): HTTP requests per second processed by application
-- TPS (Database): Database transactions committed per second
-- P95 Latency: 95% of requests completed within this time
-- Context Switches: OS scheduler context switches (lower is better for given load)
-- Cache Hit Ratio: Percentage of data found in memory vs disk
-
+Definition,Description
+TPS (Application),HTTP requests per second processed by application
+TPS (Database),Database transactions committed per second
+P95 Latency,95% of requests completed within this time
+Context Switches,OS scheduler context switches (lower is better)
+Cache Hit Ratio,Percentage of data found in memory vs disk
+,
 Performance Targets
-- Success Rate: 100% (no errors)
-- Cache Hit Ratio: >95% (minimize disk I/O)
-- CPU Usage: <70% (leave headroom for spikes)
-- Deadlocks: 0 (no transaction conflicts)
-
-═══════════════════════════════════════════════════════════════════════════════
+Target,Value,Note
+Success Rate,100%,No errors
+Cache Hit Ratio,>95%,Minimize disk I/O
+CPU Usage,<70%,Leave headroom for spikes
+Deadlocks,0,No transaction conflicts
+,
+===============================================================================
 END OF REPORT
-═══════════════════════════════════════════════════════════════════════════════
+===============================================================================
 EOF
 
 echo "✅ Professional consolidated report generated: $REPORT_CSV"

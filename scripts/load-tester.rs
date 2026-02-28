@@ -39,10 +39,10 @@ struct Stats {
     total_requests: u64,
     successful_requests: u64,
     failed_requests: u64,
-    total_latency_ms: u64,
-    min_latency_ms: u64,
-    max_latency_ms: u64,
-    latency_samples: Vec<u64>,
+    total_latency_us: u64,  // Changed to microseconds for better precision
+    min_latency_us: u64,
+    max_latency_us: u64,
+    latency_samples: Vec<u64>,  // Store in microseconds
 }
 
 impl Stats {
@@ -51,32 +51,44 @@ impl Stats {
             total_requests: 0,
             successful_requests: 0,
             failed_requests: 0,
-            total_latency_ms: 0,
-            min_latency_ms: u64::MAX,
-            max_latency_ms: 0,
+            total_latency_us: 0,
+            min_latency_us: u64::MAX,
+            max_latency_us: 0,
             latency_samples: Vec::new(),
         }
     }
 
-    fn record(&mut self, success: bool, latency_ms: u64) {
+    fn record(&mut self, success: bool, latency_us: u64) {
         self.total_requests += 1;
         if success {
             self.successful_requests += 1;
         } else {
             self.failed_requests += 1;
         }
-        self.total_latency_ms += latency_ms;
-        self.min_latency_ms = self.min_latency_ms.min(latency_ms);
-        self.max_latency_ms = self.max_latency_ms.max(latency_ms);
-        self.latency_samples.push(latency_ms);
+        self.total_latency_us += latency_us;
+        self.min_latency_us = self.min_latency_us.min(latency_us);
+        self.max_latency_us = self.max_latency_us.max(latency_us);
+        self.latency_samples.push(latency_us);
     }
 
     fn avg_latency_ms(&self) -> f64 {
         if self.total_requests > 0 {
-            self.total_latency_ms as f64 / self.total_requests as f64
+            self.total_latency_us as f64 / self.total_requests as f64 / 1000.0
         } else {
             0.0
         }
+    }
+    
+    fn min_latency_ms(&self) -> f64 {
+        if self.min_latency_us == u64::MAX {
+            0.0
+        } else {
+            self.min_latency_us as f64 / 1000.0
+        }
+    }
+    
+    fn max_latency_ms(&self) -> f64 {
+        self.max_latency_us as f64 / 1000.0
     }
 
     fn success_rate(&self) -> f64 {
@@ -87,16 +99,18 @@ impl Stats {
         }
     }
 
-    fn p95_latency_ms(&self) -> u64 {
+    fn p95_latency_ms(&self) -> f64 {
         if self.latency_samples.is_empty() {
-            return 0;
+            return 0.0;
         }
         
         let mut sorted = self.latency_samples.clone();
         sorted.sort_unstable();
         
-        let index = ((sorted.len() as f64) * 0.95) as usize;
-        sorted[index.min(sorted.len() - 1)]
+        // Use ceiling for percentile calculation to get the value at or above 95%
+        let index = ((sorted.len() as f64) * 0.95).ceil() as usize;
+        let index = index.saturating_sub(1).min(sorted.len() - 1);
+        sorted[index] as f64 / 1000.0  // Convert to ms
     }
 }
 
@@ -118,8 +132,25 @@ async fn heavy_read_test(
             .send()
             .await;
         
-        let latency = req_start.elapsed().as_millis() as u64;
-        let success = result.is_ok() && result.unwrap().status().is_success();
+        let latency = req_start.elapsed().as_micros() as u64;
+        let success = match &result {
+            Ok(response) => {
+                let status = response.status();
+                let is_success = status.is_success();
+                // Debug first request
+                if stats.lock().await.total_requests == 0 {
+                    eprintln!("DEBUG: First request - Status: {}, Success: {}", status, is_success);
+                }
+                is_success
+            },
+            Err(e) => {
+                // Debug first error
+                if stats.lock().await.total_requests == 0 {
+                    eprintln!("DEBUG: First request error: {:?}", e);
+                }
+                false
+            },
+        };
         
         let mut stats = stats.lock().await;
         stats.record(success, latency);
@@ -155,8 +186,11 @@ async fn heavy_write_test(
             .send()
             .await;
         
-        let latency = req_start.elapsed().as_millis() as u64;
-        let success = result.is_ok() && result.unwrap().status().is_success();
+        let latency = req_start.elapsed().as_micros() as u64;
+        let success = match result {
+            Ok(response) => response.status().is_success(),
+            Err(_) => false,
+        };
         
         let mut stats = stats.lock().await;
         stats.record(success, latency);
@@ -219,8 +253,11 @@ async fn mixed_load_test(
                 .send()
                 .await;
             
-            let latency = req_start.elapsed().as_millis() as u64;
-            let success = result.is_ok() && result.unwrap().status().is_success();
+            let latency = req_start.elapsed().as_micros() as u64;
+            let success = match result {
+                Ok(response) => response.status().is_success(),
+                Err(_) => false,
+            };
             (success, latency)
         } else {
             let from_account_num = fastrand::u32(0..100000);
@@ -243,8 +280,11 @@ async fn mixed_load_test(
                 .send()
                 .await;
             
-            let latency = req_start.elapsed().as_millis() as u64;
-            let success = result.is_ok() && result.unwrap().status().is_success();
+            let latency = req_start.elapsed().as_micros() as u64;
+            let success = match result {
+                Ok(response) => response.status().is_success(),
+                Err(_) => false,
+            };
             (success, latency)
         };
         
@@ -353,13 +393,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Failed Requests: {}", format_number(final_stats.failed_requests));
     println!("Success Rate: {:.2}%", final_stats.success_rate());
     println!("---");
-    println!("TPS (Transactions Per Second): {:.2}", final_stats.total_requests as f64 / elapsed.as_secs_f64());
-    println!("QPS (Queries Per Second): {:.2}", final_stats.total_requests as f64 / elapsed.as_secs_f64());
+    let tps = final_stats.total_requests as f64 / elapsed.as_secs_f64();
+    println!("TPS (Transactions Per Second): {}", format_number(tps as u64));
+    println!("QPS (Queries Per Second): {}", format_number(tps as u64));
     println!("---");
-    println!("Min Latency: {}ms", format_number(final_stats.min_latency_ms));
+    println!("Min Latency: {:.2}ms", final_stats.min_latency_ms());
     println!("Avg Latency: {:.2}ms", final_stats.avg_latency_ms());
-    println!("P95 Latency: {}ms", format_number(final_stats.p95_latency_ms()));
-    println!("Max Latency: {}ms", format_number(final_stats.max_latency_ms));
+    println!("P95 Latency: {:.2}ms", final_stats.p95_latency_ms());
+    println!("Max Latency: {:.2}ms", final_stats.max_latency_ms());
     println!("========================\n");
     
     // Generate CSV report with PostgreSQL config
@@ -373,6 +414,104 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     
     Ok(())
+}
+
+// Helper function to determine performance status
+fn get_status(value: f64, thresholds: &[f64], higher_is_better: bool) -> &'static str {
+    if higher_is_better {
+        if value >= thresholds[0] { "EXCELLENT" }
+        else if value >= thresholds[1] { "GOOD" }
+        else if value >= thresholds[2] { "ACCEPTABLE" }
+        else { "POOR" }
+    } else {
+        if value < thresholds[0] { "EXCELLENT" }
+        else if value < thresholds[1] { "GOOD" }
+        else if value < thresholds[2] { "ACCEPTABLE" }
+        else { "POOR" }
+    }
+}
+
+// Write PostgreSQL configuration section
+fn write_pg_config<W: std::io::Write>(file: &mut W, pg_config: Option<&PostgresConfig>) -> std::io::Result<()> {
+    writeln!(file, "PostgreSQL Configuration (Runtime)")?;
+    writeln!(file, "Parameter,Value,Description")?;
+    if let Some(config) = pg_config {
+        writeln!(file, "max_connections,{},Maximum number of concurrent connections", config.max_connections)?;
+        writeln!(file, "shared_buffers,{},Shared memory buffer cache", config.shared_buffers)?;
+        writeln!(file, "effective_cache_size,{},Planner's assumption of OS cache size", config.effective_cache_size)?;
+        writeln!(file, "work_mem,{},Memory for sort/hash operations", config.work_mem)?;
+        writeln!(file, "maintenance_work_mem,{},Memory for maintenance operations", config.maintenance_work_mem)?;
+        writeln!(file, "random_page_cost,{},Random page access cost estimate", config.random_page_cost)?;
+        writeln!(file, "effective_io_concurrency,{},Number of concurrent disk I/O operations", config.effective_io_concurrency)?;
+    } else {
+        writeln!(file, "N/A,N/A,Could not fetch configuration")?;
+    }
+    writeln!(file, "")
+}
+
+// Write test configuration section
+fn write_test_config<W: std::io::Write>(
+    file: &mut W,
+    test_type: &str,
+    concurrency: usize,
+    duration_secs: u64,
+    elapsed_secs: f64,
+) -> std::io::Result<()> {
+    writeln!(file, "Test Configuration")?;
+    writeln!(file, "Parameter,Value")?;
+    writeln!(file, "Test Type,{}", test_type)?;
+    writeln!(file, "Concurrency,{}", concurrency)?;
+    writeln!(file, "Duration (seconds),{}", duration_secs)?;
+    writeln!(file, "Actual Duration (seconds),{:.2}", elapsed_secs)?;
+    writeln!(file, "")
+}
+
+// Write summary statistics section
+fn write_summary_stats<W: std::io::Write>(file: &mut W, stats: &Stats, elapsed_secs: f64) -> std::io::Result<()> {
+    writeln!(file, "Summary Statistics")?;
+    writeln!(file, "Metric,Value,Unit")?;
+    writeln!(file, "Total Requests,{},requests", stats.total_requests)?;
+    writeln!(file, "Successful Requests,{},requests", stats.successful_requests)?;
+    writeln!(file, "Failed Requests,{},requests", stats.failed_requests)?;
+    writeln!(file, "Success Rate,{:.2},%", stats.success_rate())?;
+    writeln!(file, "TPS (Transactions Per Second),{:.2},tps", stats.total_requests as f64 / elapsed_secs)?;
+    writeln!(file, "QPS (Queries Per Second),{:.2},qps", stats.total_requests as f64 / elapsed_secs)?;
+    writeln!(file, "")
+}
+
+// Write latency statistics section
+fn write_latency_stats<W: std::io::Write>(file: &mut W, stats: &Stats) -> std::io::Result<()> {
+    writeln!(file, "Latency Statistics")?;
+    writeln!(file, "Metric,Value (ms)")?;
+    writeln!(file, "Minimum Latency,{:.2}", stats.min_latency_ms())?;
+    writeln!(file, "Average Latency,{:.2}", stats.avg_latency_ms())?;
+    writeln!(file, "P95 Latency,{:.2}", stats.p95_latency_ms())?;
+    writeln!(file, "Maximum Latency,{:.2}", stats.max_latency_ms())?;
+    writeln!(file, "")
+}
+
+// Write performance indicators section
+fn write_performance_indicators<W: std::io::Write>(file: &mut W, stats: &Stats, elapsed_secs: f64) -> std::io::Result<()> {
+    writeln!(file, "Performance Indicators")?;
+    writeln!(file, "Indicator,Status,Threshold,Actual")?;
+    
+    let success_rate = stats.success_rate();
+    let success_status = get_status(success_rate, &[99.5, 99.0, 95.0], true);
+    writeln!(file, "Success Rate,{},>=99.5%,{:.2}%", success_status, success_rate)?;
+    
+    let avg_latency = stats.avg_latency_ms();
+    let latency_status = get_status(avg_latency, &[50.0, 100.0, 200.0], false);
+    writeln!(file, "Average Latency,{},<50ms,{:.2}ms", latency_status, avg_latency)?;
+    
+    let max_latency = stats.max_latency_ms();
+    let max_latency_status = get_status(max_latency, &[500.0, 1000.0, 2000.0], false);
+    writeln!(file, "Maximum Latency,{},<500ms,{:.2}ms", max_latency_status, max_latency)?;
+    
+    let tps = stats.total_requests as f64 / elapsed_secs;
+    let tps_status = get_status(tps, &[1000.0, 500.0, 100.0], true);
+    writeln!(file, "Throughput (TPS),{},>=1000,{:.2}", tps_status, tps)?;
+    
+    writeln!(file, "")
 }
 
 fn generate_csv_report(
@@ -395,57 +534,18 @@ fn generate_csv_report(
         .truncate(true)
         .open(&filename)?;
     
-    // Write professional CSV report
+    // Header
     writeln!(file, "PostgreSQL Performance Test Report")?;
     writeln!(file, "Generated,{}", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"))?;
     writeln!(file, "")?;
     
-    // PostgreSQL Configuration (queried dynamically during test)
-    writeln!(file, "PostgreSQL Configuration (Runtime)")?;
-    writeln!(file, "Parameter,Value,Description")?;
-    if let Some(config) = pg_config {
-        writeln!(file, "max_connections,{},Maximum number of concurrent connections", config.max_connections)?;
-        writeln!(file, "shared_buffers,{},Shared memory buffer cache", config.shared_buffers)?;
-        writeln!(file, "effective_cache_size,{},Planner's assumption of OS cache size", config.effective_cache_size)?;
-        writeln!(file, "work_mem,{},Memory for sort/hash operations", config.work_mem)?;
-        writeln!(file, "maintenance_work_mem,{},Memory for maintenance operations", config.maintenance_work_mem)?;
-        writeln!(file, "random_page_cost,{},Random page access cost estimate", config.random_page_cost)?;
-        writeln!(file, "effective_io_concurrency,{},Number of concurrent disk I/O operations", config.effective_io_concurrency)?;
-    } else {
-        writeln!(file, "N/A,N/A,Could not fetch configuration")?;
-    }
-    writeln!(file, "")?;
+    // Write all sections
+    write_pg_config(&mut file, pg_config)?;
+    write_test_config(&mut file, test_type, concurrency, duration_secs, elapsed_secs)?;
+    write_summary_stats(&mut file, stats, elapsed_secs)?;
+    write_latency_stats(&mut file, stats)?;
     
-    // Test Configuration
-    writeln!(file, "Test Configuration")?;
-    writeln!(file, "Parameter,Value")?;
-    writeln!(file, "Test Type,{}", test_type)?;
-    writeln!(file, "Concurrency,{}", concurrency)?;
-    writeln!(file, "Duration (seconds),{}", duration_secs)?;
-    writeln!(file, "Actual Duration (seconds),{:.2}", elapsed_secs)?;
-    writeln!(file, "")?;
-    
-    // Summary Statistics
-    writeln!(file, "Summary Statistics")?;
-    writeln!(file, "Metric,Value,Unit")?;
-    writeln!(file, "Total Requests,{},requests", stats.total_requests)?;
-    writeln!(file, "Successful Requests,{},requests", stats.successful_requests)?;
-    writeln!(file, "Failed Requests,{},requests", stats.failed_requests)?;
-    writeln!(file, "Success Rate,{:.2},%", stats.success_rate())?;
-    writeln!(file, "TPS (Transactions Per Second),{:.2},tps", stats.total_requests as f64 / elapsed_secs)?;
-    writeln!(file, "QPS (Queries Per Second),{:.2},qps", stats.total_requests as f64 / elapsed_secs)?;
-    writeln!(file, "")?;
-    
-    // Latency Statistics
-    writeln!(file, "Latency Statistics")?;
-    writeln!(file, "Metric,Value (ms)")?;
-    writeln!(file, "Minimum Latency,{}", stats.min_latency_ms)?;
-    writeln!(file, "Average Latency,{:.2}", stats.avg_latency_ms())?;
-    writeln!(file, "P95 Latency,{}", stats.p95_latency_ms())?;
-    writeln!(file, "Maximum Latency,{}", stats.max_latency_ms)?;
-    writeln!(file, "")?;
-    
-    // System Resource Metrics (Note: Collect from Prometheus/Grafana)
+    // System Resource Metrics (placeholder)
     writeln!(file, "System Resource Metrics")?;
     writeln!(file, "Metric,Value,Unit,Note")?;
     writeln!(file, "CPU Usage,N/A,%,Collect from Grafana during test")?;
@@ -455,27 +555,9 @@ fn generate_csv_report(
     writeln!(file, "Disk I/O Read,N/A,MB/s,Collect from Grafana during test")?;
     writeln!(file, "")?;
     
-    // Performance Indicators
-    writeln!(file, "Performance Indicators")?;
-    writeln!(file, "Indicator,Status,Threshold,Actual")?;
+    write_performance_indicators(&mut file, stats, elapsed_secs)?;
     
-    let success_rate = stats.success_rate();
-    let success_status = if success_rate >= 99.5 { "EXCELLENT" } else if success_rate >= 99.0 { "GOOD" } else if success_rate >= 95.0 { "ACCEPTABLE" } else { "POOR" };
-    writeln!(file, "Success Rate,{},>=99.5%,{:.2}%", success_status, success_rate)?;
-    
-    let avg_latency = stats.avg_latency_ms();
-    let latency_status = if avg_latency < 50.0 { "EXCELLENT" } else if avg_latency < 100.0 { "GOOD" } else if avg_latency < 200.0 { "ACCEPTABLE" } else { "POOR" };
-    writeln!(file, "Average Latency,{},<50ms,{:.2}ms", latency_status, avg_latency)?;
-    
-    let max_latency = stats.max_latency_ms;
-    let max_latency_status = if max_latency < 500 { "EXCELLENT" } else if max_latency < 1000 { "GOOD" } else if max_latency < 2000 { "ACCEPTABLE" } else { "POOR" };
-    writeln!(file, "Maximum Latency,{},<500ms,{}ms", max_latency_status, max_latency)?;
-    
-    let tps = stats.total_requests as f64 / elapsed_secs;
-    let tps_status = if tps >= 1000.0 { "EXCELLENT" } else if tps >= 500.0 { "GOOD" } else if tps >= 100.0 { "ACCEPTABLE" } else { "POOR" };
-    writeln!(file, "Throughput (TPS),{},>=1000,{:.2}", tps_status, tps)?;
-    
-    writeln!(file, "")?;
+    // Footer
     writeln!(file, "Notes")?;
     writeln!(file, "- System metrics should be collected from Grafana dashboard during test execution")?;
     writeln!(file, "- PostgreSQL configuration values are from environment or defaults")?;
