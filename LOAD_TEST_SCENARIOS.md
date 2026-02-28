@@ -70,12 +70,11 @@
 
 **คำสั่งทดสอบ**:
 ```bash
-# รันจาก Kubernetes
-kubectl apply -f k8s/loadtest/job-heavy-read.yaml
-kubectl logs -n corebank -f job/loadtest-heavy-read
+# รันด้วย shell script (แนะนำ)
+./scripts/run-load-test.sh heavy-read 300 50
 
-# รันจาก local
-cargo run --bin load-tester -- http://localhost:8080 heavy-read 50 300
+# หรือรันจาก local (development)
+cargo run --bin load-tester -- http://corebank-api:8080 heavy-read 50 300
 ```
 
 **Parameters**:
@@ -99,12 +98,11 @@ cargo run --bin load-tester -- http://localhost:8080 heavy-read 50 300
 
 **คำสั่งทดสอบ**:
 ```bash
-# รันจาก Kubernetes
-kubectl apply -f k8s/loadtest/job-heavy-write.yaml
-kubectl logs -n corebank -f job/loadtest-heavy-write
+# รันด้วย shell script (แนะนำ)
+./scripts/run-load-test.sh heavy-write 300 30
 
-# รันจาก local
-cargo run --bin load-tester -- http://localhost:8080 heavy-write 30 300
+# หรือรันจาก local (development)
+cargo run --bin load-tester -- http://corebank-api:8080 heavy-write 30 300
 ```
 
 **Parameters**:
@@ -130,12 +128,14 @@ cargo run --bin load-tester -- http://localhost:8080 heavy-write 30 300
 
 **คำสั่งทดสอบ**:
 ```bash
-# รันจาก Kubernetes
-kubectl apply -f k8s/loadtest/job-mixed-load.yaml
-kubectl logs -n corebank -f job/loadtest-mixed-load
+# รันด้วย shell script (แนะนำ)
+./scripts/run-load-test.sh mixed 300 50
 
-# รันจาก local
-cargo run --bin load-tester -- http://localhost:8080 mixed 50 300
+# หรือรัน test suite ครบชุด
+./scripts/performance-test-suite.sh
+
+# หรือรันจาก local (development)
+cargo run --bin load-tester -- http://corebank-api:8080 mixed 50 300
 ```
 
 **Parameters**:
@@ -342,7 +342,66 @@ WHERE datname = 'corebank';
 - เพิ่ม shared_buffers
 - ใช้ faster disk (SSD)
 
-## 📝 Test Report Template
+## 📊 CSV Reports (Automated)
+
+### การสร้าง CSV Reports อัตโนมัติ
+
+ทุก load test จะสร้าง CSV report อัตโนมัติใน `/tmp/` ของ pod:
+
+```bash
+# รัน test
+./scripts/run-load-test.sh heavy-read 60 10
+
+# Output จะแสดง:
+📊 CSV Report generated: /tmp/loadtest_heavy-read_20260228_103045.csv
+```
+
+### รวบรวม Reports
+
+```bash
+# ดึง reports ทั้งหมดจาก pods
+./scripts/collect-reports.sh
+
+# สร้าง summary report
+./scripts/generate-summary-report.sh
+```
+
+### โครงสร้าง CSV Report
+
+แต่ละ report ประกอบด้วย:
+
+1. **Test Configuration** - test type, concurrency, duration
+2. **Summary Statistics** - total requests, TPS, success rate
+3. **Latency Statistics** - min, avg, max latency
+4. **Performance Indicators** - status (EXCELLENT/GOOD/ACCEPTABLE/POOR)
+
+### Performance Thresholds
+
+| Metric | EXCELLENT | GOOD | ACCEPTABLE | POOR |
+|--------|-----------|------|------------|------|
+| Success Rate | ≥99.5% | ≥99.0% | ≥95.0% | <95.0% |
+| Avg Latency | <50ms | <100ms | <200ms | ≥200ms |
+| Max Latency | <500ms | <1000ms | <2000ms | ≥2000ms |
+| TPS | ≥1000 | ≥500 | ≥100 | <100 |
+
+### Summary Report
+
+Summary report รวม:
+- เปรียบเทียบทุก tests
+- Overall performance status
+- Recommendations สำหรับการ tune
+
+```bash
+# View summary
+cat reports/SUMMARY_*.csv
+
+# Open in Excel/Google Sheets
+open reports/SUMMARY_*.csv
+```
+
+## 📝 Test Report Template (Manual)
+
+หากต้องการสร้าง report เพิ่มเติม:
 
 ```markdown
 ## Load Test Report - [Date]
@@ -388,6 +447,10 @@ WHERE datname = 'corebank';
 - [Key findings]
 - [Bottlenecks identified]
 - [Recommendations]
+
+### CSV Reports
+- Individual reports: `./reports/loadtest_*.csv`
+- Summary report: `./reports/SUMMARY_*.csv`
 ```
 
 ---

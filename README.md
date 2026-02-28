@@ -324,8 +324,15 @@ curl -X POST http://localhost:8080/api/v1/transactions/transfer \
 4. ✅ Heavy-write test (60s, 10 users)
 5. ⏸️ Cooldown 30s
 6. ✅ Mixed load test (120s, 20 users)
+7. ✅ Collect CSV reports from pods
+8. ✅ Generate consolidated summary report
 
 **ใช้เวลารวม:** ~8 นาที
+
+**Output:**
+- Individual CSV reports สำหรับแต่ละ test
+- Summary report รวมทุก tests
+- Performance indicators และ recommendations
 
 ### 📊 รัน Load Test แบบเดียว
 
@@ -393,9 +400,9 @@ curl -X POST http://localhost:8080/api/v1/transactions/transfer \
 ### 📈 ตัวอย่างผลลัพธ์
 
 ```
-========================================
+==========================================
   PostgreSQL Performance Load Test
-========================================
+==========================================
 
 Test Configuration:
   Type:              mixed
@@ -403,12 +410,12 @@ Test Configuration:
   Concurrent Users:  10
 
 🚀 Load test started!
-========================================
+==========================================
 
 === Load Test Results ===
 Total Duration: 60.00s
-Total Requests: 9046
-Successful Requests: 9012
+Total Requests: 9,046
+Successful Requests: 9,012
 Failed Requests: 34
 Success Rate: 99.62%
 ---
@@ -420,11 +427,121 @@ Avg Latency: 45.23ms
 Max Latency: 523ms
 ========================
 
+📊 CSV Report generated: /tmp/loadtest_mixed_20260228_103045.csv
+   Copy from container: kubectl cp corebank/<pod-name>:/tmp/loadtest_mixed_20260228_103045.csv ./reports/
+
 ✅ Load test completed!
-========================================
+==========================================
 
 📊 View detailed metrics in Grafana:
    http://localhost:30030/d/postgresql-perf/postgresql-performance-tuning-dashboard
+```
+
+### 📊 CSV Reports และ Analysis
+
+#### รวบรวม Reports
+
+หลังรัน load tests แล้ว ให้ดึง CSV reports ออกมา:
+
+```bash
+./scripts/collect-reports.sh
+```
+
+**Output:**
+```
+==========================================
+  Collecting Performance Test Reports
+==========================================
+
+Using pod: corebank-api-xxx
+
+Available reports in pod:
+-rw-r--r-- 1 root root 2.1K loadtest_heavy-read_20260228_103045.csv
+-rw-r--r-- 1 root root 2.0K loadtest_heavy-write_20260228_104120.csv
+-rw-r--r-- 1 root root 2.1K loadtest_mixed_20260228_105200.csv
+
+Copying reports from pod to ./reports/ ...
+  ✅ Copied: loadtest_heavy-read_20260228_103045.csv
+  ✅ Copied: loadtest_heavy-write_20260228_104120.csv
+  ✅ Copied: loadtest_mixed_20260228_105200.csv
+
+==========================================
+  ✅ Collected 3 report(s)
+==========================================
+```
+
+#### สร้าง Summary Report
+
+```bash
+./scripts/generate-summary-report.sh
+```
+
+**สร้าง consolidated report:**
+- เปรียบเทียบผลลัพธ์ทุก tests
+- Performance indicators (EXCELLENT/GOOD/ACCEPTABLE/POOR)
+- Recommendations สำหรับการ tune
+
+#### โครงสร้าง CSV Report
+
+แต่ละ report มี 4 sections:
+
+**1. Test Configuration**
+```csv
+Test Configuration
+Parameter,Value
+Test Type,heavy-read
+Concurrency,10
+Duration (seconds),60
+Actual Duration (seconds),60.23
+```
+
+**2. Summary Statistics**
+```csv
+Summary Statistics
+Metric,Value,Unit
+Total Requests,45230,requests
+Successful Requests,45100,requests
+Failed Requests,130,requests
+Success Rate,99.71,%
+TPS (Transactions Per Second),750.45,tps
+```
+
+**3. Latency Statistics**
+```csv
+Latency Statistics
+Metric,Value (ms)
+Minimum Latency,12
+Average Latency,45.23
+Maximum Latency,523
+```
+
+**4. Performance Indicators**
+```csv
+Performance Indicators
+Indicator,Status,Threshold,Actual
+Success Rate,EXCELLENT,>=99.5%,99.71%
+Average Latency,GOOD,<50ms,45.23ms
+Maximum Latency,ACCEPTABLE,<500ms,523ms
+Throughput (TPS),GOOD,>=1000,750.45
+```
+
+**Performance Status Levels:**
+- 🟢 **EXCELLENT** - เกินเป้าหมาย
+- 🟡 **GOOD** - ดี
+- 🟠 **ACCEPTABLE** - พอใช้ได้
+- 🔴 **POOR** - ต้องปรับปรุง
+
+#### เปิด Reports
+
+```bash
+# View with cat
+cat reports/loadtest_*.csv
+
+# Open with Excel/Google Sheets
+open reports/SUMMARY_*.csv
+
+# View summary
+ls -lh reports/
 ```
 
 ## 📊 การตรวจสอบและ Monitoring
@@ -568,11 +685,22 @@ node_context_switches_total
 ### สลับไปใช้ Tuned Configuration
 
 ```bash
-# Apply tuned configuration
-kubectl apply -f k8s/postgres/configmap-tuned.yaml
-
-# Switch to tuned config
+# Switch to tuned config (recommended)
 ./scripts/switch-to-tuned-config.sh
+```
+
+**Script จะทำอัตโนมัติ:**
+- ✅ Apply tuned ConfigMap
+- ✅ Update StatefulSet environment variables
+- ✅ Update volume configuration
+- ✅ Restart PostgreSQL pod
+- ✅ Wait for pod ready
+
+**หรือทำ manual:**
+```bash
+kubectl apply -f k8s/postgres/configmap-tuned.yaml
+kubectl set env statefulset/postgres -n corebank --from=configmap/postgres-config-tuned
+kubectl delete pod postgres-0 -n corebank
 ```
 
 ### เปรียบเทียบผลลัพธ์
@@ -634,12 +762,18 @@ pg-perf-tuning-guide/
 │   └── monitoring/          # Prometheus, Grafana, Exporters
 ├── scripts/
 │   ├── seed-data.rs         # Data seeding binary (100k accounts)
-│   ├── load-tester.rs       # Load testing binary (Rust)
+│   ├── load-tester.rs       # Load testing binary (Rust + CSV reports)
 │   ├── deploy.sh            # Main deployment script
 │   ├── seed-database.sh     # Seed database script
-│   ├── run-load-test.sh     # Run load test script
-│   ├── performance-test-suite.sh  # Full test suite
+│   ├── run-load-test.sh     # Run single load test
+│   ├── performance-test-suite.sh  # Full test suite + reports
+│   ├── collect-reports.sh   # Collect CSV reports from pods
+│   ├── generate-summary-report.sh # Generate summary report
+│   ├── switch-to-tuned-config.sh  # Switch to tuned config
 │   └── cleanup.sh           # Cleanup script
+├── reports/                 # CSV reports (auto-generated)
+│   ├── loadtest_*.csv       # Individual test reports
+│   └── SUMMARY_*.csv        # Consolidated summary reports
 ├── docs/
 │   ├── ARCHITECTURE.md      # Architecture documentation
 │   └── PERFORMANCE_TUNING_GUIDE.md  # Performance tuning guide
