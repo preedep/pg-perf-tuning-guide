@@ -319,11 +319,11 @@ curl -X POST http://localhost:8080/api/v1/transactions/transfer \
 
 **Test Suite จะรัน:**
 1. ✅ Seed database (100,000 accounts)
-2. ✅ Heavy-read test (60s, 10 users)
+2. ✅ Heavy-read test (60s, 20 users)
 3. ⏸️ Cooldown 30s
-4. ✅ Heavy-write test (60s, 10 users)
+4. ✅ Heavy-write test (60s, 20 users)
 5. ⏸️ Cooldown 30s
-6. ✅ Mixed load test (120s, 20 users)
+6. ✅ Mixed load test (120s, **100 users**) - Peak Load
 7. ✅ Collect CSV reports from pods
 8. ✅ Generate consolidated summary report
 
@@ -333,6 +333,12 @@ curl -X POST http://localhost:8080/api/v1/transactions/transfer \
 - Individual CSV reports สำหรับแต่ละ test
 - Summary report รวมทุก tests
 - Performance indicators และ recommendations
+
+**⚠️ Peak Load (100 users):**
+- แสดงให้เห็นว่า `max_connections` เพียงอย่างเดียวไม่ช่วยเพิ่ม performance
+- PostgreSQL ใช้ **process-based model** → 1 connection = 1 process
+- **CPU จะเป็น bottleneck** เมื่อมี process มากเกินไป
+- Context switching จะสูงมาก ทำให้ performance ลดลง
 
 ### 📊 รัน Load Test แบบเดียว
 

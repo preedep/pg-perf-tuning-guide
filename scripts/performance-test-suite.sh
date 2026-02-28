@@ -8,13 +8,17 @@ echo "=========================================="
 echo ""
 echo "This script will run a comprehensive performance test suite:"
 echo "  1. Seed database with 100,000 accounts"
-echo "  2. Run heavy-read test (60s, 10 users)"
+echo "  2. Run heavy-read test (60s, 20 users)"
 echo "  3. Wait 30s for cooldown"
-echo "  4. Run heavy-write test (60s, 10 users)"
+echo "  4. Run heavy-write test (60s, 20 users)"
 echo "  5. Wait 30s for cooldown"
-echo "  6. Run mixed load test (120s, 20 users)"
+echo "  6. Run mixed load test (120s, 100 users) - Peak Load"
 echo ""
 echo "Total estimated time: ~8 minutes"
+echo ""
+echo "NOTE: Peak load (100 users) demonstrates that max_connections"
+echo "      alone doesn't improve performance due to PostgreSQL's"
+echo "      process-based architecture. CPU becomes the bottleneck."
 echo ""
 
 read -p "Continue? (y/n) " -n 1 -r
@@ -38,7 +42,7 @@ echo ""
 echo "=========================================="
 echo "  Step 2/6: Heavy Read Test"
 echo "=========================================="
-./scripts/run-load-test.sh heavy-read 60 10
+./scripts/run-load-test.sh heavy-read 60 20
 
 echo ""
 echo "Cooldown period (30 seconds)..."
@@ -48,7 +52,7 @@ echo ""
 echo "=========================================="
 echo "  Step 3/6: Heavy Write Test"
 echo "=========================================="
-./scripts/run-load-test.sh heavy-write 60 10
+./scripts/run-load-test.sh heavy-write 60 20
 
 echo ""
 echo "Cooldown period (30 seconds)..."
@@ -56,9 +60,11 @@ sleep 30
 
 echo ""
 echo "=========================================="
-echo "  Step 4/6: Mixed Load Test"
+echo "  Step 4/6: Mixed Load Test (Peak: 100 users)"
 echo "=========================================="
-./scripts/run-load-test.sh mixed 120 20
+echo "⚠️  This will demonstrate CPU bottleneck with process-based model"
+echo ""
+./scripts/run-load-test.sh mixed 120 100
 
 echo ""
 echo "=========================================="
