@@ -5,6 +5,25 @@
 
 set -e
 
+# Enable comma formatting
+export LC_NUMERIC="en_US.UTF-8"
+
+# Function to format numbers with commas
+format_number() {
+    local num=$1
+    # Handle N/A
+    if [ "$num" = "N/A" ]; then
+        echo "N/A"
+        return
+    fi
+    # Handle decimal numbers
+    if [[ $num =~ ^[0-9]+\.[0-9]+$ ]]; then
+        printf "%'.2f" "$num" 2>/dev/null || echo "$num"
+    else
+        printf "%'d" "${num%.*}" 2>/dev/null || echo "$num"
+    fi
+}
+
 TEST_TYPE=${1:-"unknown"}
 APP_CSV=${2:-""}
 METRICS_JSON=${3:-""}

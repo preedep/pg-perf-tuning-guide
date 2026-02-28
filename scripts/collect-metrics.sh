@@ -5,6 +5,20 @@
 
 set -e
 
+# Enable comma formatting
+export LC_NUMERIC="en_US.UTF-8"
+
+# Function to format numbers with commas
+format_number() {
+    local num=$1
+    # Handle decimal numbers
+    if [[ $num =~ ^[0-9]+\.[0-9]+$ ]]; then
+        printf "%'.2f" "$num" 2>/dev/null || echo "$num"
+    else
+        printf "%'d" "${num%.*}" 2>/dev/null || echo "$num"
+    fi
+}
+
 TEST_TYPE=${1:-"unknown"}
 START_TIME=${2:-$(date -u +%s)}
 END_TIME=${3:-$(date -u +%s)}
@@ -52,47 +66,47 @@ echo "Querying metrics..."
 # Database Metrics
 echo "📊 Database Metrics:"
 DB_CONNECTIONS=$(query_prometheus 'pg_stat_database_numbackends{datname="corebank"}' 'connections')
-echo "  Active Connections (avg): $DB_CONNECTIONS"
+echo "  Active Connections (avg): $(format_number $DB_CONNECTIONS)"
 
 CACHE_HIT_RATIO=$(query_prometheus 'rate(pg_stat_database_blks_hit{datname="corebank"}[5m]) / (rate(pg_stat_database_blks_hit{datname="corebank"}[5m]) + rate(pg_stat_database_blks_read{datname="corebank"}[5m]) + 0.001) * 100' 'cache_hit')
-echo "  Cache Hit Ratio (avg): $CACHE_HIT_RATIO%"
+echo "  Cache Hit Ratio (avg): $(format_number $CACHE_HIT_RATIO)%"
 
 TPS=$(query_prometheus 'rate(pg_stat_database_xact_commit{datname="corebank"}[5m])' 'tps')
-echo "  TPS (avg): $TPS"
+echo "  TPS (avg): $(format_number $TPS)"
 
 DEADLOCKS=$(query_prometheus 'pg_stat_database_deadlocks{datname="corebank"}' 'deadlocks')
-echo "  Deadlocks: $DEADLOCKS"
+echo "  Deadlocks: $(format_number $DEADLOCKS)"
 
 # System Metrics
 echo ""
 echo "💻 System Metrics:"
 CPU_USAGE=$(query_prometheus '100 - (avg(irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)' 'cpu')
-echo "  CPU Usage (avg): $CPU_USAGE%"
+echo "  CPU Usage (avg): $(format_number $CPU_USAGE)%"
 
 MEMORY_USAGE=$(query_prometheus '(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / 1024 / 1024 / 1024' 'memory')
-echo "  Memory Usage (avg): $MEMORY_USAGE GB"
+echo "  Memory Usage (avg): $(format_number $MEMORY_USAGE) GB"
 
 CONTEXT_SWITCHES=$(query_prometheus 'rate(node_context_switches_total[5m])' 'context_switches')
-echo "  Context Switches (avg): $CONTEXT_SWITCHES ops/s"
+echo "  Context Switches (avg): $(format_number $CONTEXT_SWITCHES) ops/s"
 
 # For P95, use simpler approach - just get current rate
 CONTEXT_SWITCHES_P95=$(query_prometheus 'rate(node_context_switches_total[1m])' 'context_switches_p95')
-echo "  Context Switches P95: $CONTEXT_SWITCHES_P95 ops/s"
+echo "  Context Switches P95: $(format_number $CONTEXT_SWITCHES_P95) ops/s"
 
 DISK_READ=$(query_prometheus 'rate(node_disk_read_bytes_total[5m]) / 1024 / 1024' 'disk_read')
-echo "  Disk Read (avg): $DISK_READ MB/s"
+echo "  Disk Read (avg): $(format_number $DISK_READ) MB/s"
 
 DISK_WRITE=$(query_prometheus 'rate(node_disk_written_bytes_total[5m]) / 1024 / 1024' 'disk_write')
-echo "  Disk Write (avg): $DISK_WRITE MB/s"
+echo "  Disk Write (avg): $(format_number $DISK_WRITE) MB/s"
 
 # PostgreSQL Specific Metrics
 echo ""
 echo "🗄️  PostgreSQL Metrics:"
 SHARED_BUFFERS=$(query_prometheus 'pg_settings_shared_buffers_bytes / 1024 / 1024 / 1024' 'shared_buffers')
-echo "  Shared Buffers: $SHARED_BUFFERS GB"
+echo "  Shared Buffers: $(format_number $SHARED_BUFFERS) GB"
 
 MAX_CONNECTIONS=$(query_prometheus 'pg_settings_max_connections' 'max_connections')
-echo "  Max Connections: $MAX_CONNECTIONS"
+echo "  Max Connections: $(format_number $MAX_CONNECTIONS)"
 
 # Create JSON output
 cat > "$METRICS_FILE" <<EOF

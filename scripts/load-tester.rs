@@ -99,7 +99,7 @@ impl Stats {
         }
     }
 
-    fn p95_latency_ms(&self) -> f64 {
+    fn percentile_latency_ms(&self, percentile: f64) -> f64 {
         if self.latency_samples.is_empty() {
             return 0.0;
         }
@@ -107,10 +107,22 @@ impl Stats {
         let mut sorted = self.latency_samples.clone();
         sorted.sort_unstable();
         
-        // Use ceiling for percentile calculation to get the value at or above 95%
-        let index = ((sorted.len() as f64) * 0.95).ceil() as usize;
+        // Use ceiling for percentile calculation
+        let index = ((sorted.len() as f64) * percentile).ceil() as usize;
         let index = index.saturating_sub(1).min(sorted.len() - 1);
         sorted[index] as f64 / 1000.0  // Convert to ms
+    }
+    
+    fn p50_latency_ms(&self) -> f64 {
+        self.percentile_latency_ms(0.50)
+    }
+    
+    fn p95_latency_ms(&self) -> f64 {
+        self.percentile_latency_ms(0.95)
+    }
+    
+    fn p99_latency_ms(&self) -> f64 {
+        self.percentile_latency_ms(0.99)
     }
 }
 
@@ -399,7 +411,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("---");
     println!("Min Latency: {:.2}ms", final_stats.min_latency_ms());
     println!("Avg Latency: {:.2}ms", final_stats.avg_latency_ms());
+    println!("P50 Latency (Median): {:.2}ms", final_stats.p50_latency_ms());
     println!("P95 Latency: {:.2}ms", final_stats.p95_latency_ms());
+    println!("P99 Latency: {:.2}ms", final_stats.p99_latency_ms());
     println!("Max Latency: {:.2}ms", final_stats.max_latency_ms());
     println!("========================\n");
     
@@ -485,7 +499,9 @@ fn write_latency_stats<W: std::io::Write>(file: &mut W, stats: &Stats) -> std::i
     writeln!(file, "Metric,Value (ms)")?;
     writeln!(file, "Minimum Latency,{:.2}", stats.min_latency_ms())?;
     writeln!(file, "Average Latency,{:.2}", stats.avg_latency_ms())?;
+    writeln!(file, "P50 Latency (Median),{:.2}", stats.p50_latency_ms())?;
     writeln!(file, "P95 Latency,{:.2}", stats.p95_latency_ms())?;
+    writeln!(file, "P99 Latency,{:.2}", stats.p99_latency_ms())?;
     writeln!(file, "Maximum Latency,{:.2}", stats.max_latency_ms())?;
     writeln!(file, "")
 }

@@ -11,7 +11,7 @@ data:
   postgresql.conf: |
     # Connection Settings
     listen_addresses = '*'
-    max_connections = 20
+    max_connections = 50
     
     # Memory Settings (PostgreSQL defaults)
     shared_buffers = 128MB
