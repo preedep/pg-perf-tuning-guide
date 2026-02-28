@@ -29,7 +29,7 @@ echo "Starting to seed 100,000 accounts..."
 echo "This will take approximately 2-3 minutes..."
 echo ""
 
-kubectl exec -n corebank $POD_NAME -- /app/seed-data
+kubectl exec -n corebank $POD_NAME -- sh -c 'DATABASE_URL="postgresql://postgres:postgres@postgres.corebank.svc.cluster.local:5432/corebank" /app/seed-data'
 
 echo ""
 echo "✅ Database seeding completed!"

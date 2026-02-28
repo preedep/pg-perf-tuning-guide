@@ -17,6 +17,7 @@ spec:
       containers:
       - name: postgres
         image: postgres:16-alpine
+        args: ["-c", "config_file=/etc/postgresql/postgresql.conf"]
         ports:
         - containerPort: 5432
           name: postgres
@@ -46,11 +47,11 @@ spec:
           subPath: postgresql.conf
         resources:
           requests:
-            memory: "2Gi"
-            cpu: "1000m"
-          limits:
             memory: "4Gi"
             cpu: "2000m"
+          limits:
+            memory: "8Gi"
+            cpu: "4000m"
       volumes:
       - name: postgres-config
         configMap:

@@ -4,6 +4,18 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use std::env;
+use sqlx::postgres::PgPoolOptions;
+
+#[derive(Debug, Clone)]
+struct PostgresConfig {
+    max_connections: String,
+    shared_buffers: String,
+    effective_cache_size: String,
+    work_mem: String,
+    maintenance_work_mem: String,
+    random_page_cost: String,
+    effective_io_concurrency: String,
+}
 
 // Helper function to format numbers with commas
 fn format_number(n: u64) -> String {
@@ -136,6 +148,41 @@ async fn heavy_write_test(
     }
 }
 
+async fn fetch_postgres_config() -> Result<PostgresConfig, Box<dyn std::error::Error>> {
+    let database_url = env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgresql://postgres:postgres@postgres.corebank.svc.cluster.local:5432/corebank".to_string());
+    
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&database_url)
+        .await?;
+    
+    let max_connections: (String,) = sqlx::query_as("SELECT current_setting('max_connections')")
+        .fetch_one(&pool).await?;
+    let shared_buffers: (String,) = sqlx::query_as("SELECT current_setting('shared_buffers')")
+        .fetch_one(&pool).await?;
+    let effective_cache_size: (String,) = sqlx::query_as("SELECT current_setting('effective_cache_size')")
+        .fetch_one(&pool).await?;
+    let work_mem: (String,) = sqlx::query_as("SELECT current_setting('work_mem')")
+        .fetch_one(&pool).await?;
+    let maintenance_work_mem: (String,) = sqlx::query_as("SELECT current_setting('maintenance_work_mem')")
+        .fetch_one(&pool).await?;
+    let random_page_cost: (String,) = sqlx::query_as("SELECT current_setting('random_page_cost')")
+        .fetch_one(&pool).await?;
+    let effective_io_concurrency: (String,) = sqlx::query_as("SELECT current_setting('effective_io_concurrency')")
+        .fetch_one(&pool).await?;
+    
+    Ok(PostgresConfig {
+        max_connections: max_connections.0,
+        shared_buffers: shared_buffers.0,
+        effective_cache_size: effective_cache_size.0,
+        work_mem: work_mem.0,
+        maintenance_work_mem: maintenance_work_mem.0,
+        random_page_cost: random_page_cost.0,
+        effective_io_concurrency: effective_io_concurrency.0,
+    })
+}
+
 async fn mixed_load_test(
     client: &Client,
     base_url: &str,
@@ -214,6 +261,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Duration: {} seconds", duration_secs);
     println!("================================\n");
     
+    // Fetch PostgreSQL configuration dynamically
+    println!("Fetching PostgreSQL configuration...");
+    let pg_config = match fetch_postgres_config().await {
+        Ok(config) => {
+            println!("✅ PostgreSQL Config:");
+            println!("   max_connections: {}", config.max_connections);
+            println!("   shared_buffers: {}", config.shared_buffers);
+            println!("   effective_cache_size: {}", config.effective_cache_size);
+            println!("");
+            Some(config)
+        },
+        Err(e) => {
+            eprintln!("⚠️  Warning: Could not fetch PostgreSQL config: {}", e);
+            eprintln!("   Continuing with test...\n");
+            None
+        }
+    };
+    
     let client = Arc::new(Client::builder()
         .timeout(Duration::from_secs(30))
         .build()?);
@@ -281,13 +346,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Max Latency: {}ms", format_number(final_stats.max_latency_ms));
     println!("========================\n");
     
-    // Generate CSV report
+    // Generate CSV report with PostgreSQL config
     generate_csv_report(
         test_type,
         concurrency,
         duration_secs,
         &final_stats,
         elapsed.as_secs_f64(),
+        pg_config.as_ref(),
     )?;
     
     Ok(())
@@ -299,6 +365,7 @@ fn generate_csv_report(
     duration_secs: u64,
     stats: &Stats,
     elapsed_secs: f64,
+    pg_config: Option<&PostgresConfig>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use std::fs::OpenOptions;
     use std::io::Write;
@@ -315,6 +382,22 @@ fn generate_csv_report(
     // Write professional CSV report
     writeln!(file, "PostgreSQL Performance Test Report")?;
     writeln!(file, "Generated,{}", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"))?;
+    writeln!(file, "")?;
+    
+    // PostgreSQL Configuration (queried dynamically during test)
+    writeln!(file, "PostgreSQL Configuration (Runtime)")?;
+    writeln!(file, "Parameter,Value,Description")?;
+    if let Some(config) = pg_config {
+        writeln!(file, "max_connections,{},Maximum number of concurrent connections", config.max_connections)?;
+        writeln!(file, "shared_buffers,{},Shared memory buffer cache", config.shared_buffers)?;
+        writeln!(file, "effective_cache_size,{},Planner's assumption of OS cache size", config.effective_cache_size)?;
+        writeln!(file, "work_mem,{},Memory for sort/hash operations", config.work_mem)?;
+        writeln!(file, "maintenance_work_mem,{},Memory for maintenance operations", config.maintenance_work_mem)?;
+        writeln!(file, "random_page_cost,{},Random page access cost estimate", config.random_page_cost)?;
+        writeln!(file, "effective_io_concurrency,{},Number of concurrent disk I/O operations", config.effective_io_concurrency)?;
+    } else {
+        writeln!(file, "N/A,N/A,Could not fetch configuration")?;
+    }
     writeln!(file, "")?;
     
     // Test Configuration
@@ -345,6 +428,16 @@ fn generate_csv_report(
     writeln!(file, "Maximum Latency,{}", stats.max_latency_ms)?;
     writeln!(file, "")?;
     
+    // System Resource Metrics (Note: Collect from Prometheus/Grafana)
+    writeln!(file, "System Resource Metrics")?;
+    writeln!(file, "Metric,Value,Unit,Note")?;
+    writeln!(file, "CPU Usage,N/A,%,Collect from Grafana during test")?;
+    writeln!(file, "Memory Usage,N/A,GB,Collect from Grafana during test")?;
+    writeln!(file, "Context Switches,N/A,ops/s,Collect from Grafana during test")?;
+    writeln!(file, "Disk I/O Write,N/A,MB/s,Collect from Grafana during test")?;
+    writeln!(file, "Disk I/O Read,N/A,MB/s,Collect from Grafana during test")?;
+    writeln!(file, "")?;
+    
     // Performance Indicators
     writeln!(file, "Performance Indicators")?;
     writeln!(file, "Indicator,Status,Threshold,Actual")?;
@@ -365,6 +458,11 @@ fn generate_csv_report(
     let tps_status = if tps >= 1000.0 { "EXCELLENT" } else if tps >= 500.0 { "GOOD" } else if tps >= 100.0 { "ACCEPTABLE" } else { "POOR" };
     writeln!(file, "Throughput (TPS),{},>=1000,{:.2}", tps_status, tps)?;
     
+    writeln!(file, "")?;
+    writeln!(file, "Notes")?;
+    writeln!(file, "- System metrics should be collected from Grafana dashboard during test execution")?;
+    writeln!(file, "- PostgreSQL configuration values are from environment or defaults")?;
+    writeln!(file, "- For accurate system metrics, query Prometheus during the test time range")?;
     writeln!(file, "")?;
     writeln!(file, "End of Report")?;
     

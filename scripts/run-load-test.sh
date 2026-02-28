@@ -82,8 +82,12 @@ echo "🚀 Load test started!"
 echo "=========================================="
 echo ""
 
-# Run load test
-# load-tester runs inside the pod, use service name for internal communication
+echo "Running load test in pod: $POD_NAME"
+echo ""
+echo "Note: PostgreSQL configuration will be fetched dynamically during test execution"
+echo ""
+
+# Run load test (it will query PostgreSQL config automatically)
 kubectl exec -n corebank $POD_NAME -- /app/load-tester http://corebank-api:8080 $TEST_TYPE $CONCURRENT_USERS $DURATION
 
 echo ""
